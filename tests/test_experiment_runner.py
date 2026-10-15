@@ -1,9 +1,19 @@
-import pandas as pd
+
+import pytest
 from qiskit import QuantumCircuit
 
 from src.metrics import collect_metrics
-from src.experiment_runner import OUTPUT_PATH, run_experiments
-from src.experiment_runner import GRAPH_EDGES, build_qaoa_circuit
+from src.experiment_runner import (
+    GRAPH_EDGES,
+    GAMMA,
+    build_qaoa_circuit,
+    run_experiments,
+)
+from src.transpilation import OPTIMIZATION_LEVELS, transpile_circuit, get_coupling_map
+from src.validate_qaoa import (
+    get_probabilities,
+    align_compiled_probabilities,
+)
 
 
 def test_graph_has_four_vertices_and_four_edges():
@@ -30,9 +40,6 @@ def test_qaoa_circuit_contains_cost_and_mixer_gates():
     assert operations.get("h", 0) == 4
 
 
-from src.transpilation import OPTIMIZATION_LEVELS, transpile_circuit
-
-
 def test_all_transpilation_configurations():
     circuit = build_qaoa_circuit()
 
@@ -50,24 +57,17 @@ def test_all_transpilation_configurations():
 
 
 def test_invalid_topology_is_rejected():
-    from src.transpilation import get_coupling_map
-    import pytest
-
     with pytest.raises(ValueError):
         get_coupling_map("invalid_topology")
 
 
 def test_invalid_optimization_level_is_rejected():
-    import pytest
-
     with pytest.raises(ValueError):
         transpile_circuit(
             build_qaoa_circuit(),
             optimization_level=4,
             topology="linear",
         )
-
-from src.experiment_runner import GAMMA
 
 
 def test_qaoa_cost_gates_use_expected_angle():
@@ -129,3 +129,33 @@ def test_experiment_results_have_forty_rows():
         for topology in ("linear", "fully_connected")
         for level in range(4)
     }
+
+
+def test_transpilation_preserves_output_probabilities():
+    original = build_qaoa_circuit()
+    original_probabilities = get_probabilities(original)
+
+    for topology in ("linear", "fully_connected"):
+        for level in OPTIMIZATION_LEVELS:
+            compiled, _ = transpile_circuit(
+                original,
+                optimization_level=level,
+                topology=topology,
+            )
+
+            compiled_probabilities = align_compiled_probabilities(
+                original, compiled
+            )
+
+            difference = max(
+                abs(a - b)
+                for a, b in zip(
+                    original_probabilities,
+                    compiled_probabilities,
+                )
+            )
+
+            assert difference < 1e-8, (
+                f"Probability mismatch: topology={topology}, "
+                f"optimization_level={level}, difference={difference}"
+            )
