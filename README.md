@@ -153,3 +153,79 @@ python -m pytest -v
 - Qiskit Transpiler Guide: https://qiskit.qotlabs.org/docs/guides/transpile
 - Transpiler Stages: https://qiskit.qotlabs.org/docs/guides/transpiler-stages
 - Qiskit Compiler API: https://qiskit.qotlabs.org/docs/api/qiskit/compiler
+
+
+## QAOA Validation and Transpilation Equivalence
+
+### Circuit validation
+
+The Q-TRACE experiment uses a four-qubit QAOA circuit for Max-Cut on a four-vertex cycle with four edges.
+
+The circuit uses:
+- QAOA depth: p = 1
+- Cost parameter: gamma = 0.5
+- Mixer parameter: beta = 0.25
+- Cost gates: RZZ(-gamma)
+- Mixer gates: RX(2 * beta)
+
+Ideal statevector simulation produced the following baseline results:
+
+| Metric | Result |
+|---|---:|
+| Number of qubits | 4 |
+| Number of graph edges | 4 |
+| Expected Max-Cut value | 2.708073 / 4 |
+| Probability of an optimal cut | 0.358374 |
+
+These results correspond to the fixed circuit parameters used in this experiment. They do not establish that the parameters are globally optimal.
+
+### Transpilation equivalence
+
+The original circuit was compared with transpiled circuits for both coupling topologies and optimization levels 0–3.
+
+The comparison accounts for the transpiler's final qubit layout before comparing output probability distributions.
+
+| Topology | Optimization level | Maximum probability difference |
+|---|---:|---:|
+| Linear | 0 | 4.163e-16 |
+| Linear | 1 | 4.163e-16 |
+| Linear | 2 | 2.776e-16 |
+| Linear | 3 | 2.776e-16 |
+| Fully connected | 0 | 4.163e-16 |
+| Fully connected | 1 | 4.163e-16 |
+| Fully connected | 2 | 4.163e-16 |
+| Fully connected | 3 | 4.163e-16 |
+
+The differences are at floating-point numerical precision, supporting ideal output-probability equivalence for all eight tested configurations.
+
+### Observed connectivity effects
+
+For the tested circuit, the compiled structural metrics were:
+
+| Topology | Optimization level | Two-qubit operations | Circuit depth |
+|---|---:|---:|---:|
+| Linear | 0 | 14 | 18 |
+| Linear | 1 | 14 | 18 |
+| Linear | 2 | 12 | 18 |
+| Linear | 3 | 12 | 18 |
+| Fully connected | 0 | 8 | 14 |
+| Fully connected | 1 | 8 | 14 |
+| Fully connected | 2 | 8 | 14 |
+| Fully connected | 3 | 8 | 14 |
+
+For this specific circuit, the linear coupling topology produced 50%–75% more two-qubit operations than the fully connected topology, depending on the optimization level. Its circuit depth was approximately 28.6% higher.
+
+These are observations for the selected graph, circuit parameters, basis gates, layout, and Qiskit version. They should not be generalized to all quantum circuits or hardware.
+
+Two-qubit operation counts and circuit depth are used as structural indicators. Explicit SWAP counts alone may not capture all routing overhead because transpilation can decompose or eliminate SWAP operations.
+
+### Automated validation
+
+Run the following commands from the project root:
+
+```bash
+python -m src.validate_qaoa
+python -m pytest -v
+```
+
+The test suite checks circuit construction, gate parameters, metrics, experiment records, and output-probability equivalence across all eight transpilation configurations.
