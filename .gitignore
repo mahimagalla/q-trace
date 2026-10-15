@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Q-TRACE local environment and editor files
+.venv/
+.vscode/
+.idea/
