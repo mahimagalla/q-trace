@@ -2,13 +2,18 @@
 from qiskit import QuantumCircuit
 
 
+NON_GATE_OPERATIONS = {"measure", "barrier", "delay"}
+
+
 def collect_metrics(circuit: QuantumCircuit) -> dict:
-    """Collect resource metrics from a quantum circuit."""
+    """Collect operation counts and gate-only circuit depth."""
 
     one_qubit_gates = 0
     two_qubit_gates = 0
     measurement_count = 0
     explicit_swap_count = 0
+
+    gate_only_circuit = QuantumCircuit(*circuit.qregs)
 
     for instruction in circuit.data:
         operation = instruction.operation
@@ -21,6 +26,11 @@ def collect_metrics(circuit: QuantumCircuit) -> dict:
         if name in {"barrier", "delay"}:
             continue
 
+        qubits = [
+            gate_only_circuit.qubits[circuit.find_bit(qubit).index]
+            for qubit in instruction.qubits
+        ]
+
         if name == "swap":
             explicit_swap_count += 1
 
@@ -29,12 +39,7 @@ def collect_metrics(circuit: QuantumCircuit) -> dict:
         elif operation.num_qubits == 2:
             two_qubit_gates += 1
 
-    gate_only_circuit = circuit.copy()
-    gate_only_circuit.remove_final_measurements(inplace=True)
-
-    for instruction in list(gate_only_circuit.data):
-        if instruction.operation.name in {"barrier", "delay"}:
-            gate_only_circuit.data.remove(instruction)
+        gate_only_circuit.append(operation, qubits)
 
     return {
         "num_qubits": circuit.num_qubits,

@@ -3,36 +3,91 @@
 
 **Compilation-Aware Resource Estimation for NISQ Quantum Circuits**
 
-Q-TRACE investigates how transpiler optimization levels and hardware connectivity affect the compiled resource requirements of a QAOA circuit for the Max-Cut problem.
+Q-TRACE studies how transpiler optimization levels and hardware connectivity affect the compiled resource requirements of a QAOA circuit for the Max-Cut problem.
 
-## Research Setup
+## Experiment Configuration
 
 - **Benchmark:** QAOA for Max-Cut
-- **Graph:** Four-vertex cycle with edges (0,1), (1,2), (2,3), (3,0)
+- **Graph:** Four-vertex cycle
+- **Edges:** (0,1), (1,2), (2,3), (3,0)
 - **QAOA depth:** p = 1
+- **Fixed parameters:** gamma = 0.5, beta = 0.25
 - **Optimization levels:** 0, 1, 2, 3
-- **Connectivity topologies:** Linear and fully connected
+- **Connectivity:** Linear and fully connected
 - **Basis gates:** `u`, `cx`
-- **Transpiler seed:** 2026
 - **Initial layout:** Identity layout
+- **Transpiler seed:** 2026
+- **Trials per configuration:** 5
 
-The experiment runner evaluates eight combinations of topology and optimization level.
+The experiment runner evaluates eight topology/optimization configurations and stores five raw timing trials per configuration, producing 40 rows.
+
+## QAOA Circuit
+
+The circuit prepares a uniform superposition using Hadamard gates, applies the cost unitary using `RZZ` gates, applies the mixer using `RX` gates, and measures the qubits.
+
+The Max-Cut cost Hamiltonian convention used is:
+
+\[
+H_C = \sum_{(u,v)\in E}\frac{I-Z_uZ_v}{2}
+\]
+
+The cost-unitary convention is:
+
+\[
+U_C(\gamma)=e^{-i\gamma H_C}
+\]
+
+For this convention, the implementation uses `rzz(-GAMMA, u, v)` for each graph edge, up to a global phase.
+
+The parameters are fixed starting values, not claimed to be optimal. The current tests check the circuit structure and expected cost-gate angle; a separate objective-value validation is still required before claiming solution quality.
 
 ## Metrics
 
-The pipeline records:
+The CSV records:
 
+- Number of qubits
 - Total operations
-- One-qubit gate count
-- Two-qubit gate count
-- Gate-only circuit depth
 - Measurement count
+- One-qubit operation count
+- Two-qubit operation count
+- Gate-only circuit depth
 - Explicit SWAP count
 - Input-circuit SWAP count
 - Transpilation time
+- Topology and optimization level
 - Qiskit and Python versions
+- Trial ID and transpiler seed
 
-Explicit SWAP counts are diagnostic only. SWAP operations may be decomposed into basis gates during transpilation, so two-qubit gate count and circuit depth are also used to examine potential routing overhead.
+Measurements, barriers, and delays are excluded from the one-qubit and two-qubit operation counts. Gate-only depth is calculated after excluding those operations.
+
+`explicit_swap_count` counts instructions named `swap` in the compiled circuit. Routing SWAPs may be decomposed into basis gates, so this count alone does not measure total routing overhead.
+
+`input_swap_count` counts explicit SWAP instructions in the original QAOA input circuit.
+
+The two-qubit operation count includes all two-qubit operations, not exclusively entangling gates.
+
+## Preliminary Findings
+
+In the current experiment:
+
+| Optimization level | Linear two-qubit operations | Fully connected two-qubit operations |
+|---:|---:|---:|
+| 0 | 14 | 8 |
+| 1 | 14 | 8 |
+| 2 | 12 | 8 |
+| 3 | 12 | 8 |
+
+The measured gate-only depth was 18 for linear connectivity and 14 for fully connected connectivity at every optimization level in this run.
+
+These are preliminary results for one four-qubit circuit, one parameter setting, and the selected Qiskit transpiler configuration. They should not be generalized to all quantum circuits or hardware.
+
+## Timing Methodology
+
+Each configuration is transpiled five times using the same transpiler seed and settings. All 40 raw timing observations are retained in the CSV.
+
+Median transpilation time is reported for each configuration. Minimum-to-maximum ranges describe observed variability; they are not confidence intervals.
+
+Repeated timings with a fixed seed measure runtime variability under fixed compilation settings. They do not represent independent random transpiler configurations.
 
 ## Project Structure
 
@@ -41,12 +96,16 @@ q-trace/
 ├── circuits/
 ├── experiments/
 ├── plots/
+│   ├── two_qubit_gates.png
+│   ├── circuit_depth.png
+│   └── transpilation_time.png
 ├── results/
 │   └── qtrace_results.csv
 ├── src/
 │   ├── __init__.py
 │   ├── experiment_runner.py
 │   ├── metrics.py
+│   ├── plot_results.py
 │   └── transpilation.py
 ├── tests/
 │   └── test_experiment_runner.py
@@ -56,15 +115,10 @@ q-trace/
 
 ## Setup
 
-Create and activate a virtual environment, then install the dependencies:
-
-```bash
-python -m venv .venv
-```
-
-Windows Command Prompt:
+Create and activate a virtual environment:
 
 ```cmd
+python -m venv .venv
 .venv\Scripts\activate
 python -m pip install -r requirements.txt
 ```
@@ -73,41 +127,26 @@ python -m pip install -r requirements.txt
 
 From the repository root:
 
-```bash
+```cmd
 python -m src.experiment_runner
 ```
 
-The results are written to:
+The output is saved to `results/qtrace_results.csv`. Running the experiment runner again overwrites the previous CSV.
 
-```text
-results/qtrace_results.csv
+## Generate Plots
+
+```cmd
+python -m src.plot_results
 ```
 
-Running the experiment runner again overwrites the previous CSV.
+Plots are written to the `plots/` directory.
 
 ## Run Tests
 
-Install pytest if it is not already installed:
-
-```bash
+```cmd
 python -m pip install pytest
-```
-
-Run the test suite:
-
-```bash
 python -m pytest -v
 ```
-
-## Current Preliminary Observation
-
-In the initial run, the linear configuration produced 12–14 two-qubit gates, while the fully connected configuration produced 8. These are preliminary results from one fixed circuit and parameter setting; they do not establish a general result for all QAOA circuits or hardware.
-
-## Reproducibility
-
-The transpiler seed, optimization level, topology, initial layout, basis gates, and software versions are recorded in the experiment output.
-
-Transpilation time may vary across runs and system conditions. For stronger timing comparisons, use repeated trials and report a suitable summary statistic, such as the median.
 
 ## References
 
