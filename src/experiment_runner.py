@@ -43,6 +43,34 @@ def build_qaoa_circuit() -> QuantumCircuit:
     circuit.measure_all()
     return circuit
 
+def collect_baseline() -> dict:
+    """Collect metrics for the original, untranspiled QAOA circuit."""
+
+    circuit = build_qaoa_circuit()
+    metrics = collect_metrics(circuit)
+
+    return {
+        "experiment_id": "EXP-01",
+        "circuit_name": "QAOA_MaxCut_Cycle4_p1",
+        "graph_edges": str(GRAPH_EDGES),
+        "num_qubits": NUM_QUBITS,
+        "qaoa_p": 1,
+        "parameter_values": f"gamma={GAMMA},beta={BETA}",
+        "optimization_level": "",
+        "topology": "baseline",
+        "initial_layout": str(list(range(NUM_QUBITS))),
+        "routing_method": "",
+        "basis_gates": str(BASIS_GATES),
+        "seed_transpiler": SEED_TRANSPIER,
+        "qiskit_version": qiskit.__version__,
+        "python_version": platform.python_version(),
+        **metrics,
+        "input_swap_count": "",
+        "transpile_time_seconds": "",
+        "trial_id": "",
+    }
+
+
 
 def run_experiments() -> list[dict]:
     """Run five trials for each topology and optimization configuration."""
