@@ -43,6 +43,34 @@ def build_qaoa_circuit() -> QuantumCircuit:
     circuit.measure_all()
     return circuit
 
+def collect_baseline() -> dict:
+    """Collect metrics for the original, untranspiled QAOA circuit."""
+
+    circuit = build_qaoa_circuit()
+    metrics = collect_metrics(circuit)
+
+    return {
+        "experiment_id": "EXP-BASELINE",
+        "circuit_name": "QAOA_MaxCut_Cycle4_p1",
+        "graph_edges": str(GRAPH_EDGES),
+        "num_qubits": NUM_QUBITS,
+        "qaoa_p": 1,
+        "parameter_values": f"gamma={GAMMA},beta={BETA}",
+        "optimization_level": "",
+        "topology": "baseline",
+        "initial_layout": str(list(range(NUM_QUBITS))),
+        "routing_method": "",
+        "basis_gates": str(BASIS_GATES),
+        "seed_transpiler": SEED_TRANSPIER,
+        "qiskit_version": qiskit.__version__,
+        "python_version": platform.python_version(),
+        **metrics,
+        "input_swap_count": "",
+        "transpile_time_seconds": "",
+        "trial_id": "",
+    }
+
+
 
 def run_experiments() -> list[dict]:
     """Run five trials for each topology and optimization configuration."""
@@ -110,12 +138,15 @@ def run_experiments() -> list[dict]:
 
 
 def save_results(results: list[dict]) -> None:
-    """Save all raw experiment trials to CSV."""
-
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    """Save baseline metrics and all compiled experiment trials to CSV."""
 
     if not results:
         raise ValueError("No experiment results were produced.")
+
+    baseline = collect_baseline()
+    all_results = [baseline] + results
+
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with OUTPUT_PATH.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(
@@ -123,9 +154,13 @@ def save_results(results: list[dict]) -> None:
             fieldnames=list(results[0].keys()),
         )
         writer.writeheader()
-        writer.writerows(results)
+        writer.writerows(all_results)
 
-    print(f"\nSaved {len(results)} trial records to {OUTPUT_PATH}")
+    print(
+        f"\nSaved {len(all_results)} records "
+        f"({len(all_results) - 1} compiled trials + 1 baseline) "
+        f"to {OUTPUT_PATH}"
+    )
 
 
 if __name__ == "__main__":
