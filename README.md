@@ -131,15 +131,22 @@ From the repository root:
 python -m src.experiment_runner
 ```
 
-The output is saved to `results/qtrace_results.csv`. Running the experiment runner again overwrites the previous CSV.
+To run the dedicated optimization experiments across levels 0, 1, 2, and 3:
+
+```cmd
+python -m experiments.optimization.optimization_runner
+```
+
+The output is saved to `results/qtrace_results.csv` and `results/optimization_experiments.csv`.
 
 ## Generate Plots
 
 ```cmd
 python -m src.plot_results
+python -m experiments.optimization.plot_optimization
 ```
 
-Plots are written to the `plots/` directory.
+Plots are written to `plots/` and `plots/optimization/`.
 
 ## Run Tests
 
