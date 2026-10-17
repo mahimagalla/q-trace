@@ -50,7 +50,7 @@ def collect_baseline() -> dict:
     metrics = collect_metrics(circuit)
 
     return {
-        "experiment_id": "EXP-01",
+        "experiment_id": "EXP-BASELINE",
         "circuit_name": "QAOA_MaxCut_Cycle4_p1",
         "graph_edges": str(GRAPH_EDGES),
         "num_qubits": NUM_QUBITS,

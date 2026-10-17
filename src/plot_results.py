@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -11,10 +10,21 @@ PLOTS_DIR = Path("plots")
 
 def main():
     df = pd.read_csv(RESULTS_PATH)
+
+    # Exclude the baseline from compiled-configuration analysis.
+    compiled_df = df[
+        df["topology"].isin(["linear", "fully_connected"])
+    ].copy()
+
+    if compiled_df.empty:
+        raise ValueError("No compiled experiment records found in the CSV.")
+
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     structural = (
-        df.groupby(["topology", "optimization_level"], as_index=False)
+        compiled_df.groupby(
+            ["topology", "optimization_level"], as_index=False
+        )
         .agg(
             gate_count_2q=("gate_count_2q", "median"),
             circuit_depth=("circuit_depth", "median"),
@@ -45,7 +55,9 @@ def main():
         plt.close(fig)
 
     timing = (
-        df.groupby(["topology", "optimization_level"])["transpile_time_seconds"]
+        compiled_df.groupby(["topology", "optimization_level"])[
+            "transpile_time_seconds"
+        ]
         .agg(["median", "min", "max"])
         .reset_index()
     )
@@ -75,7 +87,7 @@ def main():
     fig.savefig(PLOTS_DIR / "transpilation_time.png", dpi=200)
     plt.close(fig)
 
-    print("Saved plots:")
+    print("Saved plots using compiled experiment records only:")
     for name in (
         "two_qubit_gates.png",
         "circuit_depth.png",
