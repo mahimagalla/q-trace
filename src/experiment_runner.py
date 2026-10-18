@@ -23,7 +23,8 @@ GAMMA = 0.5
 BETA = 0.25
 NUM_TRIALS = 5
 
-OUTPUT_PATH = Path("results") / "qtrace_results.csv"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_PATH = REPO_ROOT / "results" / "qtrace_results.csv"
 
 
 def build_qaoa_circuit() -> QuantumCircuit:

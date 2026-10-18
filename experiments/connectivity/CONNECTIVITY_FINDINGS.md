@@ -20,7 +20,7 @@ All experimental factors were held strictly constant across comparisons:
 
 | Optimization Level | Metric | Linear Topology | Fully Connected (Ideal) | Routing Overhead |
 |:---:|:---|:---:|:---:|:---:|
-| **Level 0** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>5.49 ms | 8<br>14<br>5.32 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+0.17 ms (+3.2%) |
+| **Level 0** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>6.65 ms | 8<br>14<br>5.32 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+1.33 ms (+24.9%) |
 | **Level 1** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>15.59 ms | 8<br>14<br>7.42 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+8.17 ms (+110.1%) |
 | **Level 2** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 12<br>18<br>13.55 ms | 8<br>14<br>10.98 ms | **+50.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+2.57 ms (+23.4%) |
 | **Level 3** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 12<br>18<br>12.21 ms | 8<br>14<br>11.13 ms | **+50.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+1.08 ms (+9.7%) |
@@ -44,8 +44,8 @@ All experimental factors were held strictly constant across comparisons:
    - Across all optimization levels, critical path depth on Linear connectivity remains locked at 18 due to dependency serialization along the 1D chain.
 
 4. **Transpilation Runtime Considerations:**
-   - Compiling under Linear connectivity generally incurs longer transpilation times than Fully Connected at lower optimization levels (e.g., 15.59 ms vs. 7.42 ms at Level 1) due to the overhead of heuristic routing and swap insertion.
-   - At Level 2 and Level 3, heavy synthesis and optimization passes dominate compilation time for both topologies, narrowing the runtime difference to ~1–2 ms.
+   - Linear connectivity has higher median transpilation times than Fully Connected at Levels 0–3 in this dataset (for example, 15.59 ms vs. 7.42 ms at Level 1). These measurements do not isolate the cause of the timing differences.
+   - At Levels 2 and 3, the observed median differences are 2.57 ms and 1.08 ms, respectively. With five trials per configuration, these timing comparisons are preliminary.
 
 ## 4. Generated Plots
 
@@ -56,6 +56,6 @@ All experimental factors were held strictly constant across comparisons:
 
 ## 5. Experimental Scope & Limitations
 
-- **Timing Sample Size & Variability:** Compilation durations are based on five repeated trials per cell ($N=5$) with a fixed seed (`2026`). While trials exhibit observable execution variability (including cold-start effects and runtime dispersion), the sample size measures variability under fixed compilation settings rather than definitive latency distributions. Strong conclusions regarding classical runtime advantages should therefore be avoided.
+- **Timing Sample Size & Variability:** Compilation durations are based on five repeated trials per cell ($N=5$) with a fixed seed (`2026`). The Linear Level 0 group includes one observed runtime of approximately 4.59 seconds; its cause is unknown. The small sample measures observed runtime variability under fixed compilation settings, not definitive latency distributions. Strong conclusions regarding classical runtime advantages should therefore be avoided.
 - **Software Environment:** All experiments were executed and recorded using Qiskit `2.5.1` and Python `3.14.2` on Windows 64-bit.
 - **Circuit Scope:** These empirical observations are specific to a single 4-qubit QAOA Max-Cut instance at depth $p=1$ with identity initial layout and basis `['u', 'cx']`. They should not be generalized to larger graph instances, arbitrary hardware topologies, or alternate transpiler pass configurations without further empirical studies.

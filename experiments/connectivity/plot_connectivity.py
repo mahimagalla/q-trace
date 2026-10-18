@@ -150,8 +150,9 @@ def plot_transpilation_time(df: pd.DataFrame, out_dir: Path) -> Path:
         )
 
     ax.set_xlabel("Transpiler Optimization Level", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Median Transpilation Time (ms)", fontsize=11, fontweight="bold")
-    ax.set_title("Classical Compilation Runtime (5 Trials per Cell)", fontsize=12, fontweight="bold")
+    ax.set_yscale("log")
+    ax.set_ylabel("Median Transpilation Time (ms, log scale)", fontsize=11, fontweight="bold")
+    ax.set_title("Transpilation Time (Median; Min–Max, N=5)", fontsize=12, fontweight="bold")
     ax.set_xticks([0, 1, 2, 3])
     ax.legend(frameon=True)
     ax.grid(True, linestyle="--", alpha=0.5)

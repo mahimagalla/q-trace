@@ -339,4 +339,4 @@ For comparable experiments, record the Python and Qiskit versions, target basis,
 
 ## License
 
-Refer to the repository's `LICENSE` file for the applicable terms. If no license file exists, the project should not be assumed to be open source solely because it is hosted on GitHub.
+This repository does not include a `LICENSE` file, so no project license is declared here. Do not assume open-source reuse permission solely because the repository is hosted on GitHub.

@@ -1,4 +1,6 @@
 
+from pathlib import Path
+
 import pytest
 from qiskit import QuantumCircuit
 
@@ -6,6 +8,7 @@ from src.metrics import collect_metrics
 from src.experiment_runner import (
     GRAPH_EDGES,
     GAMMA,
+    OUTPUT_PATH,
     build_qaoa_circuit,
     run_experiments,
 )
@@ -19,6 +22,10 @@ from src.validate_qaoa import (
 def test_graph_has_four_vertices_and_four_edges():
     assert len(set(v for edge in GRAPH_EDGES for v in edge)) == 4
     assert len(GRAPH_EDGES) == 4
+
+
+def test_primary_results_path_is_independent_of_working_directory():
+    assert OUTPUT_PATH == Path(__file__).resolve().parents[1] / "results" / "qtrace_results.csv"
 
 
 def test_qaoa_circuit_has_four_qubits():

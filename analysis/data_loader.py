@@ -296,10 +296,23 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
         python_vers = {r.python_version for r in loader.records}
         basis_gates = {r.basis_gates for r in loader.records}
         seeds = {r.seed_transpiler for r in loader.records}
+        initial_layouts = {r.initial_layout for r in loader.records}
+        routing_methods = {r.routing_method for r in loader.compiled_records}
         topologies = {r.topology for r in loader.compiled_records}
         opt_levels = {r.optimization_level for r in loader.compiled_records}
 
-        sig = f"qiskit={sorted(qiskit_vers)}_basis={sorted(basis_gates)}_seed={sorted(seeds)}"
+        signature_parts = {
+            "qiskit": qiskit_vers,
+            "python": python_vers,
+            "basis": basis_gates,
+            "seed": seeds,
+            "layout": initial_layouts,
+            "routing": routing_methods,
+        }
+        sig = "_".join(
+            f"{key}={sorted(str(value) if value is not None else 'unknown' for value in values)}"
+            for key, values in signature_parts.items()
+        )
         signatures.setdefault(sig, []).append(name)
 
         report["datasets"][name] = {
@@ -309,7 +322,9 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
             "topologies": sorted(list(topologies)),
             "optimization_levels": sorted([x for x in opt_levels if x is not None]),
             "qiskit_versions": sorted(list(qiskit_vers)),
-            "python_versions": sorted([str(p) for p in python_vers]),
+            "python_versions": sorted(
+                str(p) if p is not None else "unknown" for p in python_vers
+            ),
             "basis_gates": sorted(list(basis_gates)),
             "validation_errors": loader.validation_errors,
         }
@@ -323,6 +338,13 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
             f"Different Qiskit versions detected across datasets: {all_qiskit}. "
             "Timing comparisons between different versions must not be combined directly; "
             "separate analyses should be maintained."
+        )
+
+    all_python = {ver for ds in report["datasets"].values() for ver in ds["python_versions"]}
+    if len(all_python) > 1:
+        report["notes"].append(
+            f"Different Python versions detected across datasets: {all_python}. "
+            "Timing comparisons across these environments should be interpreted cautiously."
         )
 
     return report
