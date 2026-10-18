@@ -14,6 +14,7 @@ All experimental factors were held strictly constant across comparisons:
 - **Routing method:** Qiskit default preset pass manager
 - **Transpiler seed:** `2026`
 - **Repetitions:** 5 trials per configuration (40 compiled trials + 1 baseline row)
+- **Environment:** Qiskit `2.5.1`, Python `3.14.2` (Windows 64-bit)
 
 ## 2. Quantitative Results & Routing Overhead Table
 
@@ -28,7 +29,7 @@ All experimental factors were held strictly constant across comparisons:
 
 1. **Origin of the Routing Penalty:**
    - The logical problem graph contains four cycle edges: $(0,1)$, $(1,2)$, $(2,3)$, and $(3,0)$.
-   - In the **Fully Connected** topology, all pairs have direct hardware links (12 directed edges). Every two-qubit cost interaction is realized directly with 2 CX gates per $R_{ZZ}$ block, resulting in exactly **8 CX gates** (the theoretical minimum).
+   - In the **Fully Connected** topology, all pairs have direct hardware links (12 directed edges). Under our chosen standard decomposition of 2 CX gates per $R_{ZZ}$ block across the four problem edges, the compiled circuit consistently produces **8 CX gates** across all optimization levels.
    - In the **Linear** topology, the physical hardware only allows $(0,1)$, $(1,2)$, and $(2,3)$ (6 directed edges). The non-adjacent edge $(3,0)$ requires routing mediation.
 
 2. **SWAP Decomposition & Metric Nuance:**
@@ -38,13 +39,13 @@ All experimental factors were held strictly constant across comparisons:
    - Calling `explicit_swap_count` the "routing SWAP count" would be misleading; two-qubit gate counts and critical-path depth serve as the rigorous empirical measures of routing overhead.
 
 3. **Optimization-Connectivity Interaction:**
-   - On Fully Connected topology, higher optimization levels (2 and 3) do not reduce two-qubit gates below 8, because 8 CX is already the optimal decomposition for 4 unconstrained $R_{ZZ}$ unitaries.
-   - On Linear topology, optimization levels 2 and 3 successfully eliminate **2 CX gates** (reducing CX count from 14 to 12, a 14.3% reduction) by synthesizing and canceling entangling operations, though at the cost of 5 additional single-qubit rotations (17 vs. 12).
+   - On Fully Connected topology, optimization levels 0 through 3 consistently yield 8 two-qubit operations, reflecting the baseline structure under our chosen decomposition.
+   - On Linear topology, optimization levels 2 and 3 yield **12 CX gates** compared to 14 CX at levels 0 and 1 (a 14.3% reduction in two-qubit operations alongside an increase from 12 to 17 single-qubit rotations). Rather than asserting specific internal pulse or gate cancellation mechanisms without transpiler pass-manager execution traces, we report this as an empirical structural reduction observed under Qiskit's higher-level synthesis and heuristic optimization passes.
    - Across all optimization levels, critical path depth on Linear connectivity remains locked at 18 due to dependency serialization along the 1D chain.
 
 4. **Transpilation Runtime Considerations:**
-   - Compiling under Linear connectivity consistently requires longer transpilation time than Fully Connected at lower levels (15.59 ms vs. 7.42 ms at Level 1) because the routing and layout passes must explore and insert routing routes.
-   - At Level 2 and Level 3, the heavy synthesis passes dominate compilation time for both topologies, narrowing the runtime gap to ~1–2 ms.
+   - Compiling under Linear connectivity generally incurs longer transpilation times than Fully Connected at lower optimization levels (e.g., 15.59 ms vs. 7.42 ms at Level 1) due to the overhead of heuristic routing and swap insertion.
+   - At Level 2 and Level 3, heavy synthesis and optimization passes dominate compilation time for both topologies, narrowing the runtime difference to ~1–2 ms.
 
 ## 4. Generated Plots
 
@@ -52,3 +53,9 @@ All experimental factors were held strictly constant across comparisons:
 - `plots/connectivity/connectivity_circuit_depth.png`: Critical-path depth comparison across levels.
 - `plots/connectivity/connectivity_transpilation_time.png`: Median transpilation time with min-max variability error bars.
 - `plots/connectivity/connectivity_routing_overhead_pct.png`: Relative percentage routing penalty of Linear vs. Fully Connected.
+
+## 5. Experimental Scope & Limitations
+
+- **Timing Sample Size & Variability:** Compilation durations are based on five repeated trials per cell ($N=5$) with a fixed seed (`2026`). While trials exhibit observable execution variability (including cold-start effects and runtime dispersion), the sample size measures variability under fixed compilation settings rather than definitive latency distributions. Strong conclusions regarding classical runtime advantages should therefore be avoided.
+- **Software Environment:** All experiments were executed and recorded using Qiskit `2.5.1` and Python `3.14.2` on Windows 64-bit.
+- **Circuit Scope:** These empirical observations are specific to a single 4-qubit QAOA Max-Cut instance at depth $p=1$ with identity initial layout and basis `['u', 'cx']`. They should not be generalized to larger graph instances, arbitrary hardware topologies, or alternate transpiler pass configurations without further empirical studies.
