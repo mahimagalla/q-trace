@@ -1,285 +1,610 @@
-# Integrated Resource Trade-off and Pareto Analysis
+# Q-TRACE: Compilation-Aware Resource Estimation for NISQ Quantum Circuits
 
-**Project:** Q-TRACE (Compilation-Aware Resource Estimation for NISQ Quantum Circuits)  
-**Team:** EIGEN5 (IEG 313: Quantum Computing for Engineers)  
-**Author:** Shaik Shaheeq (Member 5 — Integrated Analysis, Visualization, and Trade-offs)  
-**Date:** October 2026  
-**Status:** Validated Research Findings Report  
+**Team:** EIGEN5  
+**Course:** IEG 313 — Quantum Computing for Engineers  
+**Institution:** IIIT Kottayam
 
----
+Q-TRACE (**Quantum Transpilation and Resource Analysis under Connectivity Effects**) is a research project that investigates how quantum circuit transpilation choices affect circuit structure, gate resources, and classical compilation time in Noisy Intermediate-Scale Quantum (NISQ) computing.
 
-## Executive Summary
+The project studies the interaction between transpiler optimization levels and qubit connectivity constraints using a reproducible Quantum Approximate Optimization Algorithm (QAOA) Max-Cut benchmark implemented with Qiskit.
 
-This report delivers the integrated findings for the **Q-TRACE** research study, synthesizing empirical measurements across transpiler optimization levels (Levels 0, 1, 2, and 3) and physical qubit coupling topologies (Linear vs. idealized Fully Connected). The analysis evaluates compilation-aware resource requirements for a fixed 4-qubit Quantum Approximate Optimization Algorithm (QAOA) Max-Cut benchmark ($p=1$).
-
-Using reproducible data loading, strict mathematical Pareto dominance modeling, and systematic cross-dataset auditing, we examine the trade-offs between two-qubit gate count ($2Q$), gate-only circuit depth, single-qubit rotation overhead, and classical transpilation time.
-
-### Key Measured Insights:
-1. **Connectivity Routing Penalty:** For this 4-vertex cycle instance, constrained Linear connectivity imposes an observed **$+75.0\%$ two-qubit gate overhead** (14 CX vs. 8 CX) at Optimization Levels 0–1 and a **$+50.0\%$ overhead** (12 CX vs. 8 CX) at Optimization Levels 2–3, alongside an invariant **$+28.6\%$ gate-only depth penalty** (depth 18 vs. 14).
-2. **Decomposition vs. Routing Overhead:** The untranspiled baseline contains 4 two-qubit $R_{ZZ}$ gates and 8 single-qubit gates. Compiling to the basis set `['u', 'cx']` decomposes each $R_{ZZ}$ interaction into 2 CX gates and local rotations, producing 8 CX gates even under unconstrained connectivity. Zero explicit SWAP instructions (`explicit_swap_count = 0`) are observed across all 40 compiled trials because routing SWAPs are fully decomposed into basis CX gates.
-3. **The 2Q vs. 1Q Gate Optimization Trade-off:** On the Linear topology, higher optimization levels (Levels 2 and 3) successfully eliminate 2 CX gates (reducing $2Q$ count from 14 to 12, a $14.3\%$ reduction), but this reduction requires **5 additional single-qubit rotations** (increasing $1Q$ gate count from 12 to 17) while leaving circuit depth unchanged at 18.
-4. **Pareto Frontier & "Universal Winner" Evaluation:**
-   * **Global Multi-Objective Frontier:** When idealized Fully Connected connectivity is compared alongside Linear connectivity, `fully_connected / Opt 0` strictly dominates all other configurations on the primary dataset ($2Q=8$, $\text{depth}=14$, $\text{median time}=8.74\text{ ms}$).
-   * **Within-Topology Realism:** On physical Linear hardware where connectivity is fixed by device physics, **no single universal winner exists**. **Linear Opt 0** is Pareto-optimal for compilation latency ($13.24\text{ ms}$ median), whereas **Linear Opt 2** is Pareto-optimal for minimizing entangling gate count ($12\text{ CX}$ gates), requiring a $+53.2\%$ classical transpilation time investment.
+Rather than assuming that higher optimization levels always produce better circuits, Q-TRACE compares measured resource metrics and identifies trade-offs using multi-objective Pareto analysis.
 
 ---
 
-## 1. Experimental Methodology & Benchmark Setup
+## Table of Contents
 
-The experimental framework evaluates how compilation pass managers alter circuit resource profiles under controlled constraints.
-
-### 1.1 Benchmark Specification
-* **Problem:** Max-Cut on an unweighted 4-vertex cycle graph $C_4$.
-* **Graph Edges:** $E = \{(0, 1), (1, 2), (2, 3), (3, 0)\}$. The non-adjacent edge $(3, 0)$ forces routing mediation on 1D linear physical lattices.
-* **QAOA Instance:** Depth $p = 1$, using fixed variational parameters $\gamma = 0.5$ (cost parameter) and $\beta = 0.25$ (mixer parameter). Parameters are held strictly constant to isolate compilation mechanics; variational parameter optimization is deliberately decoupled from this study.
-* **Cost Hamiltonian Formulation:**
-  $$H_C = \sum_{(u,v) \in E} \frac{I - Z_u Z_v}{2}, \quad U_C(\gamma) = e^{-i \gamma H_C} \equiv \prod_{(u,v) \in E} R_{ZZ}(-\gamma, u, v)$$
-* **Mixer Unitary:**
-  $$U_M(\beta) = \prod_{v \in V} R_X(2\beta, v)$$
-
-### 1.2 Transpilation Matrix & Controlled Factors
-To ensure fair empirical comparisons, all compilation factors were held constant with the exception of the two independent experimental variables:
-
-| Experimental Factor | Value / Protocol Specification | Methodological Rationale |
-| :--- | :--- | :--- |
-| **Optimization Levels** | `0, 1, 2, 3` | Explores preset Qiskit pass manager configurations from basic translation to aggressive synthesis. |
-| **Coupling Topologies** | **Linear:** `[0-1, 1-2, 2-3]` (bidirectional, 6 links)<br>**Fully Connected:** Complete graph $K_4$ (bidirectional, 12 links) | Contrasts hardware-constrained 1D routing against an unconstrained idealized baseline. |
-| **Target Basis Gates** | `['u', 'cx']` | Fixed standard universal basis. Mandates uniform gate representation across topologies. |
-| **Initial Layout** | Identity: $q_0 \to Q_0, q_1 \to Q_1, q_2 \to Q_2, q_3 \to Q_3$ | Eliminates layout search heuristics as an uncontrolled confounder. |
-| **Transpiler Seed** | `2026` | Ensures deterministic routing seed behavior across repetitions. |
-| **Repeated Trials** | $N = 5$ independent timing trials per cell | Measures classical transpilation runtime variability. |
-| **Scheduling** | Off / Not requested | Duration and idle-time pulse schedules are excluded from this phase. |
-
-### 1.3 Metric Counting Conventions
-In strict adherence to the Q-TRACE protocol:
-* **Exclusion Rule:** Measurement operations, barriers, delays, and compiler directives are strictly excluded from `gate_count_1q`, `gate_count_2q`, and `circuit_depth`. Measurement operations are recorded in an independent `measurement_count` field.
-* **Gate Arity:** Two-qubit gates are counted by operator arity rather than gate name alone. In basis `['u', 'cx']`, two-qubit operations correspond strictly to CX gates.
-* **Transpilation Time:** Measured purely as wall-clock time around the isolated Qiskit `transpile()` function invocation, excluding circuit creation, metric extraction, and disk I/O.
+- [Overview](#overview)
+- [Research Objectives](#research-objectives)
+- [Research Questions](#research-questions)
+- [Benchmark and Experimental Setup](#benchmark-and-experimental-setup)
+- [Experimental Variables](#experimental-variables)
+- [Metrics](#metrics)
+- [Key Results](#key-results)
+- [Pareto Analysis](#pareto-analysis)
+- [Repository Structure](#repository-structure)
+- [Technology Stack](#technology-stack)
+- [Installation and Setup](#installation-and-setup)
+- [Running the Experiments](#running-the-experiments)
+- [Integrated Analysis](#integrated-analysis)
+- [Validation and Tests](#validation-and-tests)
+- [Interpretation and Limitations](#interpretation-and-limitations)
+- [Team Contributions](#team-contributions)
+- [Reproducibility](#reproducibility)
+- [License](#license)
 
 ---
 
-## 2. Cross-Dataset Audit & Environmental Compatibility
+## Overview
 
-Three distinct experimental CSV outputs were audited using [`analysis/data_loader.py`](file:///Users/shaheeq.s/q-trace/analysis/data_loader.py):
+Quantum circuits designed at a logical level must be translated into instructions supported by a target quantum processor. This process, known as **transpilation**, can change the number and arrangement of gates, circuit depth, and compilation runtime.
 
-| Dataset Path | Rows | Qiskit Version | Python Version | Primary Purpose |
-| :--- | :---: | :---: | :---: | :--- |
-| **`results/qtrace_results.csv`** | 40 | `2.5.2` | `3.14.4` | **Primary Integrated Dataset:** 8 configurations $\times$ 5 trials. Clean baseline environment. |
-| **`results/optimization_experiments.csv`** | 40 | `2.5.2` | `3.14.4` | **Member 3 Study:** Dedicated optimization sweeps. |
-| **`results/connectivity_experiments.csv`** | 41 | `2.5.1` | `3.14.2` | **Member 4 Study:** Dedicated connectivity sweeps + 1 untranspiled baseline record. |
+Physical quantum processors also impose connectivity constraints: not every pair of physical qubits can necessarily interact directly. These restrictions can introduce additional gates and dependencies when a circuit is compiled for a particular device topology.
 
-### Methodological Rule on Cross-Environment Data:
-The audit confirmed that **structural metrics (1Q gates, 2Q gates, and depth) are 100% invariant across all three datasets**. However, because classical compilation runtimes are sensitive to software versioning and system environments (Qiskit `2.5.2` vs. `2.5.1`, Python `3.14.4` vs. `3.14.2`), **transpilation timing observations from different environments must not be merged into a single pooled distribution**. 
+Q-TRACE examines these effects through controlled experiments involving:
 
-Consequently, the primary quantitative findings and Pareto frontiers in this report are anchored on the internally consistent `results/qtrace_results.csv` dataset, with cross-dataset differences explicitly annotated.
+- Four transpiler optimization levels: 0, 1, 2, and 3.
+- Two coupling topologies: Linear and Fully Connected.
+- A fixed four-qubit QAOA Max-Cut circuit.
+- A fixed target basis of `['u', 'cx']`.
+- Repeated compilation trials to measure runtime variability.
+- Structural resource analysis and Pareto-frontier evaluation.
 
----
+The aim is to understand how compilation settings affect the measured circuit resource profile and how the preferred setting depends on the resource objective.
 
-## 3. Quantitative Results & Structural Invariants
+## Research Objectives
 
-The table below summarizes the measured structural metrics and classical transpilation times from the primary dataset (`results/qtrace_results.csv`), alongside the untranspiled baseline from `results/connectivity_experiments.csv`.
+1. Measure the structural changes introduced by quantum circuit transpilation.
+2. Compare constrained Linear connectivity with an idealized Fully Connected topology.
+3. Evaluate the effects of Qiskit optimization levels on gate count, circuit depth, and compilation time.
+4. Distinguish basis-gate decomposition from connectivity-associated routing overhead.
+5. Analyze trade-offs between two-qubit gates, circuit depth, and classical compilation runtime.
+6. Identify Pareto-optimal configurations for different resource objectives.
+7. Establish a reproducible experimental workflow for compilation-aware quantum resource estimation.
 
-| Configuration | Topology | Opt Level | 1Q Gates (`u`) | 2Q Gates (`cx`) | Gate-Only Depth | Total Ops | Explicit SWAPs | Median Time (ms) | Observed Min–Max Range (ms) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Baseline (Logical)** | `baseline` | *NA* | 8 | 4 | 6 | 12 | 0 | *NA* | *NA* |
-| **FC-Opt0** | `fully_connected` | 0 | 12 | 8 | 14 | 24 | 0 | **8.74** | 6.67 – 13.26 |
-| **FC-Opt1** | `fully_connected` | 1 | 12 | 8 | 14 | 24 | 0 | 13.37 | 11.80 – 15.65 |
-| **FC-Opt2** | `fully_connected` | 2 | 12 | 8 | 14 | 24 | 0 | 14.17 | 13.53 – 20.37 |
-| **FC-Opt3** | `fully_connected` | 3 | 12 | 8 | 14 | 24 | 0 | 18.24 | 14.44 – 21.48 |
-| **LI-Opt0** | `linear` | 0 | 12 | 14 | 18 | 30 | 0 | **13.24** | 8.94 – 49.88 |
-| **LI-Opt1** | `linear` | 1 | 12 | 14 | 18 | 30 | 0 | 14.22 | 12.46 – 16.77 |
-| **LI-Opt2** | `linear` | 2 | 17 | 12 | 18 | 33 | 0 | **20.28** | 17.55 – 22.94 |
-| **LI-Opt3** | `linear` | 3 | 17 | 12 | 18 | 33 | 0 | 20.50 | 18.18 – 21.72 |
+## Research Questions
 
-*(Note: Total operations and gate counts exclude 4 measurement operations).*
+This project investigates the following questions:
 
----
-
-## 4. In-Depth Analysis of Research Questions
-
-### 4.1 Decomposition vs. Routing Overhead
-A central point of confusion in NISQ compilation analysis is distinguishing between **basis decomposition overhead** and **connectivity routing overhead**.
-
-1. **Logical Baseline:** The untranspiled QAOA circuit contains 4 single-qubit Hadamard gates ($H$), 4 two-qubit $R_{ZZ}(-\gamma)$ problem-Hamiltonian gates, and 4 single-qubit $R_X(2\beta)$ mixer gates, yielding:
-   $$\text{1Q gates} = 8, \quad \text{2Q gates} = 4, \quad \text{Depth} = 6$$
-2. **Basis Translation Expansion:** In target basis `['u', 'cx']`, $R_{ZZ}(\theta)$ is not a native physical instruction. The canonical unitary equivalence is:
-   $$R_{ZZ}(\theta) \equiv \text{CX}(q_1, q_2) \cdot (I \otimes R_Z(\theta)) \cdot \text{CX}(q_1, q_2)$$
-   Each logical edge therefore requires **2 CX gates** and local rotation adjustments. Across 4 graph edges, basis translation expands the two-qubit requirement to:
-   $$4 \times 2 = 8 \text{ CX gates}$$
-   This expansion occurs even on the unconstrained Fully Connected topology. Thus, the jump from 4 to 8 CX gates is **purely a basis translation artifact**, not routing overhead.
-3. **The SWAP Decomposition Reality:** On Linear connectivity, the logical edge $(3, 0)$ is non-local. Compiling on a linear chain $0-1-2-3$ requires routing. However, in `results/qtrace_results.csv`, `explicit_swap_count` is **0 across all compiled configurations**. This does **not** indicate that routing occurred without SWAPs; rather, under target basis `['u', 'cx']`, Qiskit decomposes every routing SWAP into 3 CX gates:
-   $$\text{SWAP}(a, b) \equiv \text{CX}(a, b) \cdot \text{CX}(b, a) \cdot \text{CX}(a, b)$$
-   Consequently, routing overhead surfaces directly as an increase in two-qubit CX gates and critical-path depth, rather than named SWAP operations.
-
-### 4.2 Observed Connectivity-Associated Overhead
-Comparing Linear topology against Fully Connected topology under identical optimization levels isolates the physical connectivity penalty:
-
-| Optimization Level | Metric | Fully Connected | Linear Topology | Programmatic Overhead (% Increase) |
-| :---: | :--- | :---: | :---: | :---: |
-| **Level 0** | Two-qubit gates (CX)<br>Gate-only depth<br>Median transpilation time | 8<br>14<br>8.74 ms | 14<br>18<br>13.24 ms | **+75.0%**<br>**+28.6%**<br>+51.6% |
-| **Level 1** | Two-qubit gates (CX)<br>Gate-only depth<br>Median transpilation time | 8<br>14<br>13.37 ms | 14<br>18<br>14.22 ms | **+75.0%**<br>**+28.6%**<br>+6.4% |
-| **Level 2** | Two-qubit gates (CX)<br>Gate-only depth<br>Median transpilation time | 8<br>14<br>14.17 ms | 12<br>18<br>20.28 ms | **+50.0%**<br>**+28.6%**<br>+43.1% |
-| **Level 3** | Two-qubit gates (CX)<br>Gate-only depth<br>Median transpilation time | 8<br>14<br>18.24 ms | 12<br>18<br>20.50 ms | **+50.0%**<br>**+28.6%**<br>+12.4% |
-
-#### Key Empirical Observations:
-* **Entangling Gate Inflation:** At Optimization Levels 0 and 1, the lack of a direct link between qubits 3 and 0 introduces 6 additional CX gates (14 vs. 8, a **$+75.0\%$ penalty**).
-* **Depth Expansion:** In all four optimization levels, critical path depth increases from 14 to 18 (a **$+28.6\%$ penalty**). This expansion is constrained by the dependency chain along the 1D physical lattice, serializing operations that would otherwise execute concurrently.
-* **Transpilation Time Overhead:** Linear routing adds heuristic layout and routing pass overhead, increasing median compile time by $+6.4\%$ to $+51.6\%$ relative to the unconstrained topology.
-
-### 4.3 The Optimization Trade-off: 2Q Reduction vs. 1Q Gate Inflation
-Does higher transpiler optimization reduce resource usage? The empirical data reveals distinct behaviors depending on topology:
-
-1. **Fully Connected Invariance:**
-   On Fully Connected topology, Optimization Levels 0, 1, 2, and 3 produce **completely identical structural circuits**:
-   $$\text{1Q} = 12, \quad \text{2Q} = 8, \quad \text{Depth} = 14, \quad \text{Total Ops} = 24$$
-   Increasing optimization level from 0 to 3 more than doubles the median compilation runtime (from $8.74\text{ ms}$ to $18.24\text{ ms}$, a **$+108.7\%$ time penalty**) with **zero reduction in gates or depth**. For this benchmark under unconstrained connectivity, Level 0 is objectively optimal.
-2. **Linear Topology Structural Reconfiguration:**
-   On Linear topology, Optimization Levels 2 and 3 achieve an empirical reduction of 2 CX gates ($14 \to 12$, a **$-14.3\%$ reduction**). However, this reduction comes with a structural trade-off:
-   * **Single-Qubit Gate Increase:** Single-qubit rotations increase from 12 to 17 (**$+41.7\%$ increase**).
-   * **Total Operations Increase:** Total compiled operations increase from 30 to 33 (**$+10.0\%$ increase**).
-   * **Depth Invariance:** Gate-only circuit depth remains pinned at 18.
-   * **Compilation Time Cost:** Median compilation time increases from $13.24\text{ ms}$ (Opt 0) to $20.28\text{ ms}$ (Opt 2), a **$+53.2\%$ increase**.
-
-#### Physical Interpretation:
-In NISQ quantum hardware, two-qubit gate operations typically have lower fidelities than single-qubit gates. Consequently, reducing two-qubit gate count may reduce exposure to two-qubit gate errors; however, the magnitude of any reliability improvement cannot be established from these resource-count measurements alone without hardware execution or noise-model simulation. Furthermore, trading 2 CX gates for 5 single-qubit rotations requires a +53.2% classical compilation time investment at Optimization Level 2.
+1. How does physical qubit connectivity affect the compiled resource requirements of a fixed quantum circuit?
+2. How do Qiskit optimization levels change one-qubit gate count, two-qubit gate count, and circuit depth?
+3. Does a higher optimization level necessarily reduce the resources required by a compiled circuit?
+4. How much classical compilation time is associated with different optimization settings?
+5. Which configurations are Pareto-optimal when multiple resource objectives are considered?
+6. How should compilation choices be evaluated when the target connectivity is fixed?
 
 ---
 
-## 5. Pareto-Frontier Analysis
+## Benchmark and Experimental Setup
 
-Pareto optimality provides a principled, multi-objective framework to identify non-dominated compilation choices without arbitrarily weighting competing metrics.
+### QAOA Max-Cut benchmark
 
-### 5.1 Mathematical Dominance Definition
-Let each compilation configuration $C$ be characterized by an objective vector $M(C) = [m_1(C), m_2(C), \dots, m_k(C)]$. All objectives are strictly minimized (lower is better).
+The experiments use a Quantum Approximate Optimization Algorithm (QAOA) circuit for the unweighted four-vertex cycle graph \(C_4\).
 
-A configuration $A$ **strictly Pareto-dominates** configuration $B$ ($A \prec B$) if and only if:
-$$\forall i \in \{1, \dots, k\}, \quad m_i(A) \le m_i(B) \quad \text{and} \quad \exists j \in \{1, \dots, k\}, \quad m_j(A) < m_j(B)$$
+The graph is defined by:
 
-A configuration is **Pareto-optimal** if no other configuration in the evaluated set dominates it.
+\[
+V=\{0,1,2,3\}
+\]
 
-### 5.2 Evaluated Objective Spaces
+\[
+E=\{(0,1),(1,2),(2,3),(3,0)\}
+\]
 
-#### 1. Primary Multi-Objective Space (2Q Gates $\downarrow$, Depth $\downarrow$, Median Transpilation Time $\downarrow$)
-* **Evaluated Set:** All 8 compiled configurations in `results/qtrace_results.csv`.
-* **Global Non-Dominated Frontier:**
-  $$\text{Frontier} = \{\mathbf{FC\text{-}Opt0}\}$$
-* **Dominance Analysis:** `fully_connected / Opt 0` achieves $2Q = 8$, $\text{depth} = 14$, and $\text{time} = 8.74\text{ ms}$. Because it is strictly superior or equal to every other compiled configuration across all three dimensions, it mathematically dominates all other candidates in this specific global dataset.
+The graph contains four vertices and four edges. Under Linear connectivity, the interaction between qubits 3 and 0 is non-local, making this benchmark useful for examining the effects of connectivity constraints.
 
-#### 2. Structural Space (2Q Gates $\downarrow$, Gate-Only Depth $\downarrow$)
-* **Non-Dominated Frontier:**
-  $$\text{Frontier} = \{\mathbf{FC\text{-}Opt0}, \; \mathbf{FC\text{-}Opt1}, \; \mathbf{FC\text{-}Opt2}, \; \mathbf{FC\text{-}Opt3}\}$$
-* **Dominance Analysis:** All four Fully Connected levels produce identical objective vectors $(8, 14)$. Because duplicate vectors do not strictly dominate each other, all four populate the structural frontier. Both Linear clusters, $(14, 18)$ and $(12, 18)$, are strictly dominated by $(8, 14)$.
+### QAOA parameters
 
-#### 3. Compilation Trade-off Space (2Q Gates $\downarrow$, Median Transpilation Time $\downarrow$)
-* **Non-Dominated Frontier:**
-  $$\text{Frontier} = \{\mathbf{FC\text{-}Opt0}\}$$
+| Parameter | Value |
+|---|---|
+| Number of qubits | 4 |
+| Graph | Four-vertex cycle, \(C_4\) |
+| QAOA depth | \(p=1\) |
+| Cost parameter | \(\gamma=0.5\) |
+| Mixer parameter | \(\beta=0.25\) |
+| Target basis | `['u', 'cx']` |
+| Initial layout | Identity |
+| Transpiler seed | `2026` |
 
-### 5.3 Within-Topology Pareto Frontier (Constrained Linear Hardware)
-When evaluating real-world physical devices, quantum processors possess fixed coupling architectures; an experimenter targeting a linear superconducting qubit chain cannot arbitrarily deploy an idealized fully connected topology.
+The variational parameters are held fixed so that the experiments focus on compilation behavior rather than parameter optimization.
 
-Evaluating the Pareto frontier **restricted strictly to the Linear topology** yields a genuine engineering trade-off:
+### Cost Hamiltonian
 
-| Linear Configuration | 2Q Gates (CX) | Circuit Depth | Median Transpilation Time | Pareto Status (Within Linear) | Engineering Trade-off Profile |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Linear Opt 0** | 14 | 18 | **13.24 ms** | **Pareto-Optimal** | **Fastest Compilation:** Minimizes classical pre-processing overhead. Ideal for rapid simulation or compilation-sensitive loops. |
-| **Linear Opt 1** | 14 | 18 | 14.22 ms | Dominated | Dominated by Linear Opt 0 (equal gates and depth, but slower compile time). |
-| **Linear Opt 2** | **12** | 18 | 20.28 ms | **Pareto-Optimal** | **Minimal 2Q Errors:** Eliminates 2 CX gates ($-14.3\%$), reducing physical two-qubit decoherence at the cost of $+53.2\%$ compile time. |
-| **Linear Opt 3** | 12 | 18 | 20.50 ms | Dominated | Dominated by Linear Opt 2 (equal gates and depth, but slower compile time). |
+For the Max-Cut problem, the cost Hamiltonian is represented as:
 
----
+\[
+H_C=\sum_{(u,v)\in E}\frac{I-Z_uZ_v}{2}
+\]
 
-## 6. Generated Visualizations
+The corresponding cost unitary is:
 
-All four figures were generated programmatically by [`analysis/plot_integrated.py`](file:///Users/shaheeq.s/q-trace/analysis/plot_integrated.py) and saved in [`plots/analysis/`](file:///Users/shaheeq.s/q-trace/plots/analysis):
+\[
+U_C(\gamma)=e^{-i\gamma H_C}
+\]
 
-### Figure 1: Two-Qubit Gates vs. Transpilation Time
-**File:** [`plots/analysis/2q_gates_vs_transpilation_time.png`](file:///Users/shaheeq.s/q-trace/plots/analysis/2q_gates_vs_transpilation_time.png)  
-* **Visual Representation:** Scatter plot with asymmetric horizontal error bars displaying the observed min-max transpilation duration $[t_{\text{median}} - t_{\min}, \; t_{\max} - t_{\text{median}}]$ across 5 trials.
-* **Research Takeaway:** Demonstrates the runtime cost of higher synthesis passes. Fully Connected points cluster at $2Q=8$ with runtimes stretching from $8.74\text{ ms}$ (Opt 0) to $18.24\text{ ms}$ (Opt 3). Linear points reveal the discrete jump between Opt 0/1 ($14\text{ CX}$) and Opt 2/3 ($12\text{ CX}$), highlighting the skew in compilation duration (notably Linear Opt 0 ranging up to $49.88\text{ ms}$).
+The mixer unitary is:
 
-### Figure 2: Structural Comparison (Depth vs. Two-Qubit Gates)
-**File:** [`plots/analysis/depth_vs_2q_gates.png`](file:///Users/shaheeq.s/q-trace/plots/analysis/depth_vs_2q_gates.png)  
-* **Visual Representation:** Gate-only critical-path depth plotted against two-qubit gate count. Identical coordinate pairs are consolidated into clean cluster labels.
-* **Research Takeaway:** Clearly separates the design space into three distinct operational regimes:
-  1. Idealized unconstrained compilation at $(8, 14)$.
-  2. Basic linear compilation (Opt 0, 1) at $(14, 18)$.
-  3. Optimized linear compilation (Opt 2, 3) at $(12, 18)$.
-  The figure visually underscores that higher optimization reduces entangling gate count on linear lattices, but is unable to compress critical-path depth below 18.
+\[
+U_M(\beta)=\prod_{v\in V}R_X(2\beta,v)
+\]
 
-### Figure 3: Multi-Objective Pareto Frontier
-**File:** [`plots/analysis/pareto_frontier.png`](file:///Users/shaheeq.s/q-trace/plots/analysis/pareto_frontier.png)  
-* **Visual Representation:** Highlights dominated vs. non-dominated points across the evaluated objective space, marking the global non-dominated point (`fully_connected / Opt 0`) with a prominent star.
-* **Research Takeaway:** Illustrates why unconstrained connectivity provides an overwhelming advantage across all resource metrics when available, while positioning dominated points relative to their distance from the frontier.
+These operators form the QAOA circuit used in the experiments.
 
-### Figure 4: Observed Connectivity-Associated Overhead
-**File:** [`plots/analysis/routing_overhead_integrated.png`](file:///Users/shaheeq.s/q-trace/plots/analysis/routing_overhead_integrated.png)  
-* **Visual Representation:** Grouped bar chart depicting percentage increases for Linear connectivity relative to Fully Connected connectivity across all four optimization levels.
-* **Research Takeaway:** Highlights that two-qubit gate overhead is highest at lower optimization levels ($+75.0\%$) and drops to $+50.0\%$ at Levels 2 and 3. Meanwhile, critical path depth overhead remains locked at $+28.6\%$ regardless of optimization effort.
+### Coupling topologies
 
----
+**Linear topology**
 
-## 7. Scope, Methodological Precautions, and Limitations
+The physical coupling map is:
 
-To maintain academic rigor and prevent overgeneralization, several experimental boundaries must be emphasized:
+\[
+0-1-2-3
+\]
 
-1. **Specific Benchmark Instance:**
-   These findings are derived exclusively from a single 4-qubit QAOA Max-Cut benchmark on a cycle graph $C_4$ at depth $p=1$. Findings should **not** be extrapolated to arbitrary quantum algorithms, larger problem graphs ($N \gg 4$), higher QAOA depths ($p > 1$), or unstructured circuits without further empirical validation.
-2. **Idealized vs. Physical Coupling:**
-   A fully connected coupling map is an idealized analytical model used to establish a theoretical lower bound for routing overhead. Commercial NISQ devices (e.g., IBM heavy-hex, Google Sycamore square lattices, Rigetti octagonal rings) possess sparse connectivity; physical execution will always incur routing overhead.
-3. **Timing Sample Size ($N=5$):**
-   Classical compilation runtimes were measured over five repeated trials per configuration using a fixed transpiler seed (`2026`). While medians provide a robust measure of central tendency against occasional cold-start outliers (e.g., $4.58\text{ s}$ on trial 1 in `connectivity_experiments.csv`), $N=5$ represents an exploratory sample size. Observed runtimes describe compiler latency under fixed settings, not definitive statistical execution bounds.
-4. **Classical Compilation vs. Quantum Execution:**
-   Transpilation duration represents classical CPU wall-clock execution time during pass manager operation. It has no direct relationship to quantum circuit execution time (pulse duration), coherence decay, or physical hardware error rates.
-5. **Software Versioning Sensitivity:**
-   Cross-dataset audits established that while structural circuit transformations are identical between Qiskit `2.5.1` and `2.5.2`, compilation pass runtimes vary between minor releases and operating systems. Transpiler performance comparisons must always control for software version and host platform.
+Only neighboring qubits are directly connected. Non-local interactions may require routing and additional circuit operations.
+
+**Fully Connected topology**
+
+Every pair of physical qubits is connected, corresponding to the complete graph \(K_4\).
+
+This is an **idealized reference topology** used to study compilation without connectivity restrictions. It is not a claim that a particular physical quantum processor provides fully connected hardware.
 
 ---
 
-## 8. Reproducibility Instructions
+## Experimental Variables
 
-The entire integrated analysis and plotting pipeline is fully reproducible from the repository root:
+The experiments vary two principal factors.
 
-### Step 1: Environment Setup
-Ensure Python 3.10+ is available and initialize the local environment:
+### 1. Transpiler optimization level
+
+| Level | Purpose |
+|---:|---|
+| 0 | Baseline compilation with minimal optimization |
+| 1 | Light optimization |
+| 2 | More aggressive optimization |
+| 3 | Highest preset optimization level tested |
+
+The exact transformations depend on the Qiskit version and the selected target configuration.
+
+### 2. Coupling topology
+
+| Topology | Description |
+|---|---|
+| Linear | Restricted nearest-neighbor connectivity |
+| Fully Connected | Idealized connectivity without routing restrictions |
+
+### Controlled factors
+
+The target basis, initial layout, QAOA parameters, and transpiler seed are held fixed across the primary experiments.
+
+Each combination of topology and optimization level is measured over five timing trials.
+
+The primary experiment matrix contains:
+
+\[
+2\text{ topologies}\times4\text{ levels}\times5\text{ trials}=40\text{ rows}
+\]
+
+The primary dataset is stored in `results/qtrace_results.csv`.
+
+---
+
+## Metrics
+
+Q-TRACE records structural metrics and classical compilation runtime.
+
+| Metric | Description |
+|---|---|
+| `gate_count_1q` | Number of one-qubit gates |
+| `gate_count_2q` | Number of two-qubit gates |
+| `circuit_depth` | Gate-only circuit depth |
+| `total_ops` | Total operations recorded in the compiled circuit, including measurements |
+| `explicit_swap_count` | Number of explicit SWAP instructions |
+| `measurement_count` | Number of measurement operations |
+| Transpilation time | Wall-clock time spent in the Qiskit `transpile()` invocation |
+
+### Metric conventions
+
+- Measurements, barriers, delays, and compiler directives are excluded from the one-qubit and two-qubit gate counts and gate-only depth.
+- Measurement operations are recorded separately.
+- `total_ops` includes measurement operations, so it is not necessarily equal to the sum of the one-qubit and two-qubit gate counts.
+- The target basis `['u', 'cx']` represents two-qubit interactions using CX gates.
+- Routing SWAP operations may be decomposed into CX gates. Consequently, a zero explicit SWAP count does not establish that no routing overhead occurred.
+- Transpilation time represents classical compilation latency, not quantum execution time.
+
+---
+
+## Key Results
+
+The following measurements come from the primary experiment dataset.
+
+### Structural comparison
+
+| Configuration | Topology | Optimization level | 1Q gates | 2Q gates | Gate-only depth | Total operations | Median time |
+|---|---|---:|---:|---:|---:|---:|---:|
+| FC-Opt0 | Fully Connected | 0 | 12 | 8 | 14 | 24 | 8.74 ms |
+| FC-Opt1 | Fully Connected | 1 | 12 | 8 | 14 | 24 | 13.37 ms |
+| FC-Opt2 | Fully Connected | 2 | 12 | 8 | 14 | 24 | 14.17 ms |
+| FC-Opt3 | Fully Connected | 3 | 12 | 8 | 14 | 24 | 18.24 ms |
+| LI-Opt0 | Linear | 0 | 12 | 14 | 18 | 30 | 13.24 ms |
+| LI-Opt1 | Linear | 1 | 12 | 14 | 18 | 30 | 14.22 ms |
+| LI-Opt2 | Linear | 2 | 17 | 12 | 18 | 33 | 20.28 ms |
+| LI-Opt3 | Linear | 3 | 17 | 12 | 18 | 33 | 20.50 ms |
+
+*The logical baseline contains 8 one-qubit gates, 4 two-qubit \(R_{ZZ}\) gates, gate-only depth 6, and 4 measurement operations, giving 16 total operations under the project's counting convention.*
+
+### Finding 1: Connectivity affects gate count and depth
+
+At Optimization Levels 0 and 1:
+
+- Fully Connected topology uses 8 CX gates.
+- Linear topology uses 14 CX gates.
+- The Linear topology therefore has a **75% higher two-qubit gate count**.
+
+At Optimization Levels 2 and 3:
+
+- Fully Connected topology uses 8 CX gates.
+- Linear topology uses 12 CX gates.
+- The Linear topology therefore has a **50% higher two-qubit gate count**.
+
+Gate-only depth increases from 14 to 18 across all four optimization levels when comparing Linear with Fully Connected connectivity, a **28.6% increase**.
+
+### Finding 2: Higher optimization does not always reduce all resources
+
+On Fully Connected connectivity, all four optimization levels produce identical structural metrics in the primary dataset.
+
+The median compilation time nevertheless increases from 8.74 ms at Level 0 to 18.24 ms at Level 3.
+
+On Linear connectivity, Levels 2 and 3 reduce the CX count from 14 to 12, a 14.3% reduction. However, the one-qubit gate count increases from 12 to 17, total operations increase from 30 to 33, and gate-only depth remains 18.
+
+### Finding 3: Basis decomposition and routing are different
+
+The logical baseline contains four \(R_{ZZ}\) interactions. In the target basis `['u', 'cx']`, each \(R_{ZZ}\) interaction is decomposed into two CX gates and local rotations.
+
+Therefore, eight CX gates are required after this basis translation even under Fully Connected connectivity.
+
+The additional CX gates observed under Linear connectivity are associated with compiling under the restricted coupling map. Because routing SWAP operations can be decomposed into CX instructions, explicit SWAP counts alone do not capture the entire routing cost.
+
+### Finding 4: Compilation time depends on optimization level
+
+In the primary dataset, the median compilation times range from:
+
+- **8.74 ms** for Fully Connected Opt 0.
+- **20.50 ms** for Linear Opt 3.
+
+These results are specific to the tested benchmark, software versions, and execution environment.
+
+---
+
+## Pareto Analysis
+
+Pareto analysis identifies configurations that cannot be improved in one objective without worsening at least one other objective, within the evaluated set.
+
+Q-TRACE evaluates multiple objective spaces rather than assuming one configuration is universally best.
+
+### Global multi-objective comparison
+
+The primary analysis considers:
+
+1. Two-qubit gate count.
+2. Gate-only circuit depth.
+3. Median transpilation time.
+
+Within the primary dataset, `fully_connected / Opt 0` dominates the other configurations under these three objectives.
+
+Its measured resource profile is:
+
+- 8 two-qubit gates.
+- Gate-only depth 14.
+- Median transpilation time 8.74 ms.
+
+This conclusion includes the idealized Fully Connected topology and should not be interpreted as a claim that this topology is available on every physical processor.
+
+### Within-Linear comparison
+
+When the topology is restricted to Linear, the results reveal a trade-off.
+
+| Configuration | CX gates | Depth | Median compilation time | Pareto status |
+|---|---:|---:|---:|---|
+| Linear Opt 0 | 14 | 18 | 13.24 ms | Pareto-optimal |
+| Linear Opt 1 | 14 | 18 | 14.22 ms | Dominated |
+| Linear Opt 2 | 12 | 18 | 20.28 ms | Pareto-optimal |
+| Linear Opt 3 | 12 | 18 | 20.50 ms | Dominated |
+
+**Interpretation:**
+
+- Linear Opt 0 is preferred when minimizing median classical compilation time.
+- Linear Opt 2 is preferred when minimizing the two-qubit gate count.
+- Linear Opt 1 is dominated by Linear Opt 0.
+- Linear Opt 3 is dominated by Linear Opt 2.
+
+The preferred configuration therefore depends on the objective being prioritized.
+
+---
+
+## Repository Structure
+
+The repository is organized into experiment, analysis, test, and result directories.
+
+```text
+q-trace/
+├── analysis/
+│   ├── data_loader.py
+│   ├── pareto.py
+│   ├── tradeoff_analysis.py
+│   ├── plot_integrated.py
+│   └── INTEGRATED_ANALYSIS.md
+├── experiments/
+│   └── optimization/
+│       ├── plot_optimization.py
+│       └── OPTIMIZATION_FINDINGS.md
+├── plots/
+│   └── analysis/
+├── results/
+│   ├── qtrace_results.csv
+│   ├── optimization_experiments.csv
+│   ├── connectivity_experiments.csv
+│   └── tradeoff_analysis.md
+├── tests/
+│   └── test_pareto_analysis.py
+├── src/
+├── requirements.txt
+└── README.md
+```
+
+This is a high-level representation of the project structure. Additional files, experiment scripts, tests, and generated artifacts may exist in the repository.
+
+### Main components
+
+- **`src/`** — Core experiment and validation code.
+- **`experiments/optimization/`** — Optimization-level experiments, plots, and findings.
+- **`results/`** — Recorded experiment data and generated analysis reports.
+- **`analysis/data_loader.py`** — Loads and audits experimental datasets.
+- **`analysis/pareto.py`** — Implements Pareto analysis.
+- **`analysis/tradeoff_analysis.py`** — Performs integrated trade-off analysis and generates a report.
+- **`analysis/plot_integrated.py`** — Generates integrated visualization outputs.
+- **`analysis/INTEGRATED_ANALYSIS.md`** — Integrated resource trade-off and Pareto analysis report.
+- **`tests/`** — Automated tests for the analysis code.
+
+---
+
+## Technology Stack
+
+| Technology | Role |
+|---|---|
+| Python | Experiment implementation and analysis |
+| Qiskit | Quantum circuit construction and transpilation |
+| NumPy | Numerical operations |
+| pandas | Experimental data processing |
+| Matplotlib | Visualization |
+| pytest | Automated testing |
+| Git and GitHub | Version control and collaborative development |
+
+---
+
+## Installation and Setup
+
+### Prerequisites
+
+- Python 3.10 or later.
+- Git.
+- Access to the Q-TRACE repository.
+- Dependencies specified in `requirements.txt`.
+
+### 1. Clone the repository
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+git clone https://github.com/mahimagalla/q-trace.git
+cd q-trace
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+### 3. Activate the environment
+
+**Windows CMD:**
+
+```cmd
+.venv\Scripts\activate
+```
+
+**macOS or Linux:**
+
+```bash
+source .venv/bin/activate
+```
+
+### 4. Install dependencies
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 pip install pytest matplotlib numpy
 ```
 
-### Step 2: Run Unit Tests
-Execute the Pareto mathematical and data handling test suite:
-```bash
-python -m pytest tests/test_pareto_analysis.py -v
-```
-*Expected result:* 8 passed tests.
+If the repository already includes a dependency in `requirements.txt`, installing it again is unnecessary. The commands above ensure the analysis and test dependencies are available.
 
-### Step 3: Run Trade-off & Pareto Analysis
-Generate the markdown trade-off report from the primary dataset:
+### 5. Verify the environment
+
 ```bash
-python -m analysis.tradeoff_analysis \
-  --csv results/qtrace_results.csv \
-  --name "Q-TRACE Primary Experiments" \
-  --output results/tradeoff_analysis.md
+python --version
+python -m pip show qiskit
+python -m pytest -v
 ```
 
-### Step 4: Generate Publication Figures
-Render all four analysis plots:
-```bash
-python -m analysis.plot_integrated
-```
-*Outputs generated in:* `plots/analysis/`
-* `2q_gates_vs_transpilation_time.png`
-* `depth_vs_2q_gates.png`
-* `pareto_frontier.png`
-* `routing_overhead_integrated.png`
+The experiment results discussed in this README were obtained using Qiskit 2.5.2 and Python 3.14.4 for the primary dataset. Different environments may produce different compilation timings.
 
 ---
 
-## 9. Conclusion
+## Running the Experiments
 
-The Q-TRACE integrated resource trade-off analysis confirms that transpiler optimization and physical qubit connectivity interact non-trivially in NISQ circuit compilation:
-* Constrained connectivity imposes both an entangling gate penalty ($+50\% \text{ to } +75\%$) and a critical-path serialization penalty ($+28.6\%$).
-* Higher optimization levels (Levels 2 and 3) do not alter compiled metrics on unconstrained topologies, but successfully eliminate 2 CX gates under linear connectivity at the expense of increased single-qubit rotations and greater classical compilation time.
-* Declaring a single "universal best" compilation setting is physically misleading: under hardware connectivity constraints, **Optimization Level 0** minimizes classical compilation overhead, while **Optimization Level 2** provides the preferred structural configuration for minimizing two-qubit gate exposure (though any reliability improvement cannot be assumed without hardware validation).
+The exact experiment commands depend on the scripts present in the repository. The following commands describe the established analysis and validation entry points.
+
+### Validate the QAOA benchmark
+
+```bash
+python -m src.validate_qaoa
+```
+
+This command was used to validate the QAOA benchmark and its measured output.
+
+### Generate the trade-off report
+
+From the repository root:
+
+```bash
+python -m analysis.tradeoff_analysis --csv results/qtrace_results.csv --name "Q-TRACE Primary Experiments" --output results/tradeoff_analysis.md
+```
+
+This analyzes the primary dataset and generates the trade-off report.
+
+### Generate integrated plots
+
+```bash
+python -m analysis.plot_integrated
+```
+
+The integrated plots are written to `plots/analysis/`.
+
+**Important:** Experiment and plotting scripts may regenerate tracked CSVs, Markdown reports, or images. Review the resulting changes before committing them.
+
+---
+
+## Integrated Analysis
+
+The integrated analysis combines structural measurements, timing data, and Pareto comparisons to evaluate the compilation trade-offs.
+
+### Main outputs
+
+**Report:** `analysis/INTEGRATED_ANALYSIS.md`
+
+This report covers:
+
+- Benchmark and transpilation methodology.
+- Cross-dataset compatibility considerations.
+- Structural resource metrics.
+- Basis decomposition and connectivity-associated overhead.
+- Optimization-level comparisons.
+- Pareto-frontier analysis.
+- Visualizations and research limitations.
+
+**Plots:** `plots/analysis/`
+
+The analysis generates the following figures:
+
+1. `2q_gates_vs_transpilation_time.png`
+2. `depth_vs_2q_gates.png`
+3. `pareto_frontier.png`
+4. `routing_overhead_integrated.png`
+
+**Trade-off report:** `results/tradeoff_analysis.md`
+
+This file contains the generated trade-off analysis for the selected primary dataset.
+
+---
+
+## Validation and Tests
+
+Run the full test suite from the repository root:
+
+```bash
+python -m pytest -v
+```
+
+The latest recorded validation of the repository after the integrated analysis merge reported:
+
+```text
+28 passed
+```
+
+This is a previously observed result, not a guarantee for every environment or future revision.
+
+To run the Pareto-analysis tests specifically:
+
+```bash
+python -m pytest tests/test_pareto_analysis.py -v
+```
+
+The integrated analysis should be validated after code changes, particularly changes to metric extraction, dataset compatibility checks, Pareto classification, or report generation.
+
+---
+
+## Interpretation and Limitations
+
+The results should be interpreted within the scope of the experiment.
+
+### Benchmark scope
+
+The experiments use a single four-qubit QAOA Max-Cut benchmark on \(C_4\) with \(p=1\) and fixed parameters. The findings should not be generalized automatically to larger circuits, different algorithms, or higher QAOA depths.
+
+### Idealized connectivity
+
+Fully Connected connectivity is a comparison reference. Actual processors may impose sparse coupling constraints and additional hardware-specific costs.
+
+### Timing variability
+
+Each configuration was measured over five trials. This sample size is useful for exploratory comparison but does not establish definitive runtime distributions.
+
+One connectivity-dataset trial recorded a runtime of approximately 4.58 seconds. Its cause was not established, so it should not be silently treated as a confirmed measurement error.
+
+### Structural metrics vs. physical performance
+
+Gate count and circuit depth are structural resource indicators. They do not fully characterize physical execution cost, which can depend on:
+
+- Native gate implementations.
+- Calibrated error rates.
+- Gate durations and scheduling.
+- Decoherence and crosstalk.
+- Device-specific connectivity and control constraints.
+
+This project does not establish a measured improvement in hardware fidelity from reducing the CX count. Such a conclusion would require hardware execution or an appropriate noise-model evaluation.
+
+### Cross-environment comparisons
+
+The primary and supporting datasets include different Qiskit and Python versions. Structural results may agree while timing measurements remain environment-dependent. Timing comparisons should retain their software and execution context.
+
+---
+
+## Team Contributions
+
+The project is developed by **EIGEN5** as part of IEG 313: Quantum Computing for Engineers.
+
+| Team member | Student identifier | Main responsibility |
+|---|---|---|
+| Galla Mahima Suharshitha | `2024BCS0051` | Q-TRACE experiment and analysis contributions |
+| Chandrana Hanisha | `2024BCD0004` | Project experimentation and research contributions |
+| K. Prerana | `2024BCS0048` | Project experimentation and research contributions |
+| Mounika Kolluru | `2024BCS0259` | Integrated analysis and related contributions |
+| Shaik Shaheeq | `2024BCS0109` | Integrated analysis, visualization, and trade-off analysis |
+
+The table summarizes broad areas of involvement. Refer to the repository's commit history and pull requests for the exact implementation history of individual contributions.
+
+---
+
+## Reproducibility
+
+To reproduce the integrated analysis:
+
+1. Clone the repository.
+2. Create and activate a Python virtual environment.
+3. Install the project dependencies.
+4. Confirm the availability of the recorded experiment CSV files.
+5. Run the automated tests.
+6. Run the integrated trade-off analysis.
+7. Generate the integrated plots.
+8. Compare generated artifacts with the committed versions.
+
+Use the primary dataset, `results/qtrace_results.csv`, for the main resource and Pareto comparisons. Treat supporting datasets as separate experimental contexts when software versions or environments differ.
+
+For reproducible comparisons, record the Python version, Qiskit version, target basis, coupling map, initial layout, transpiler seed, optimization level, and timing protocol.
+
+---
+
+## License
+
+The repository license governs the use, modification, and redistribution of this project.
+
+Check the repository's `LICENSE` file for the applicable terms. If no license file exists, the project should not be assumed to be open source solely because it is hosted on GitHub.
