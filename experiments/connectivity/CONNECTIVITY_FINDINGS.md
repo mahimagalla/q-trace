@@ -19,7 +19,7 @@ All experimental factors were held strictly constant across comparisons:
 
 | Optimization Level | Metric | Linear Topology | Fully Connected (Ideal) | Routing Overhead |
 |:---:|:---|:---:|:---:|:---:|
-| **Level 0** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>6.65 ms | 8<br>14<br>5.32 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+1.33 ms (+25.0%) |
+| **Level 0** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>5.49 ms | 8<br>14<br>5.32 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+0.17 ms (+3.2%) |
 | **Level 1** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 14<br>18<br>15.59 ms | 8<br>14<br>7.42 ms | **+75.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+8.17 ms (+110.1%) |
 | **Level 2** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 12<br>18<br>13.55 ms | 8<br>14<br>10.98 ms | **+50.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+2.57 ms (+23.4%) |
 | **Level 3** | Two-qubit gates (CX)<br>Gate-only depth<br>Median time (ms) | 12<br>18<br>12.21 ms | 8<br>14<br>11.13 ms | **+50.0%** (CX overhead)<br>**+28.6%** (Depth overhead)<br>+1.08 ms (+9.7%) |
