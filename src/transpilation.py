@@ -6,7 +6,7 @@ from qiskit import QuantumCircuit, transpile
 
 NUM_QUBITS = 4
 BASIS_GATES = ["u", "cx"]
-SEED_TRANSPIER = 2026
+SEED_TRANSPILER = 2026
 OPTIMIZATION_LEVELS = [0, 1, 2, 3]
 
 
@@ -49,7 +49,7 @@ def transpile_circuit(
         coupling_map=coupling_map,
         initial_layout=list(range(NUM_QUBITS)),
         optimization_level=optimization_level,
-        seed_transpiler=SEED_TRANSPIER,
+        seed_transpiler=SEED_TRANSPILER,
     )
 
     elapsed_time = perf_counter() - start_time

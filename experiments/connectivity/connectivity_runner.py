@@ -10,8 +10,6 @@ qubit connectivity constraints on a 4-vertex cycle QAOA Max-Cut benchmark:
 Across optimization levels 0, 1, 2, and 3 with 5 trials per configuration.
 """
 
-import csv
-import platform
 import sys
 from pathlib import Path
 from statistics import median
@@ -35,9 +33,16 @@ from src.metrics import collect_metrics
 from src.transpilation import (
     BASIS_GATES,
     OPTIMIZATION_LEVELS,
-    SEED_TRANSPIER,
+    SEED_TRANSPILER,
     get_coupling_map,
     transpile_circuit,
+)
+from src.experiment_schema import (
+    CSV_COLUMNS,
+    GRAPH_EDGES_SERIALIZED,
+    INITIAL_LAYOUT_SERIALIZED,
+    baseline_record,
+    write_csv_atomic,
 )
 
 NUM_TRIALS = 5
@@ -71,31 +76,7 @@ def collect_baseline_record() -> dict:
     circuit = build_qaoa_circuit()
     metrics = collect_metrics(circuit)
 
-    return {
-        "experiment_id": "EXP-BASELINE",
-        "circuit_name": "QAOA_MaxCut_Cycle4_p1",
-        "graph_edges": str(GRAPH_EDGES),
-        "num_qubits": NUM_QUBITS,
-        "qaoa_p": 1,
-        "parameter_values": f"gamma={GAMMA},beta={BETA}",
-        "optimization_level": "",
-        "topology": "baseline",
-        "initial_layout": str(list(range(NUM_QUBITS))),
-        "routing_method": "",
-        "basis_gates": str(BASIS_GATES),
-        "seed_transpiler": SEED_TRANSPIER,
-        "qiskit_version": qiskit.__version__,
-        "python_version": platform.python_version(),
-        "total_ops": metrics["total_ops"],
-        "measurement_count": metrics["measurement_count"],
-        "gate_count_1q": metrics["gate_count_1q"],
-        "gate_count_2q": metrics["gate_count_2q"],
-        "circuit_depth": metrics["circuit_depth"],
-        "explicit_swap_count": metrics["explicit_swap_count"],
-        "input_swap_count": 0,
-        "transpile_time_seconds": "",
-        "trial_id": "",
-    }
+    return baseline_record(circuit)
 
 
 def run_connectivity_trials(
@@ -112,7 +93,7 @@ def run_connectivity_trials(
     print("=" * 76)
     print("Q-TRACE: Running Connectivity & Routing Experiments")
     print(f"Topologies: {topologies} | Optimization levels: {optimization_levels}")
-    print(f"Trials per configuration: {num_trials} | Seed: {SEED_TRANSPIER}")
+    print(f"Trials per configuration: {num_trials} | Seed: {SEED_TRANSPILER}")
     print("=" * 76)
 
     for topology in topologies:
@@ -139,18 +120,17 @@ def run_connectivity_trials(
                 records.append({
                     "experiment_id": f"EXP-CONN-{exp_idx:02d}",
                     "circuit_name": "QAOA_MaxCut_Cycle4_p1",
-                    "graph_edges": str(GRAPH_EDGES),
+                    "graph_edges": GRAPH_EDGES_SERIALIZED,
                     "num_qubits": NUM_QUBITS,
                     "qaoa_p": 1,
                     "parameter_values": f"gamma={GAMMA},beta={BETA}",
                     "optimization_level": opt_level,
                     "topology": topology,
-                    "initial_layout": str(list(range(NUM_QUBITS))),
+                    "initial_layout": INITIAL_LAYOUT_SERIALIZED,
                     "routing_method": "Qiskit preset default",
                     "basis_gates": str(BASIS_GATES),
-                    "seed_transpiler": SEED_TRANSPIER,
+                    "seed_transpiler": SEED_TRANSPILER,
                     "qiskit_version": qiskit.__version__,
-                    "python_version": platform.python_version(),
                     "total_ops": metrics["total_ops"],
                     "measurement_count": metrics["measurement_count"],
                     "gate_count_1q": metrics["gate_count_1q"],
@@ -185,12 +165,10 @@ def save_connectivity_results(
         raise ValueError("No connectivity experiment records to save.")
 
     all_rows = [collect_baseline_record()] + results if include_baseline else results
+    if include_baseline and any(set(row) != set(CSV_COLUMNS) for row in all_rows):
+        raise ValueError("Connectivity baseline does not match the shared CSV schema.")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(all_rows)
+    write_csv_atomic(output_path, all_rows)
 
     print(f"\n[OK] Saved {len(all_rows)} records to: {output_path}")
 

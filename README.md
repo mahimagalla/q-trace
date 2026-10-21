@@ -148,7 +148,7 @@ Pareto analysis identifies configurations that are not dominated by another conf
 
 ### Global comparison
 
-The primary analysis considers two-qubit gate count, gate-only depth, and median transpilation time. In the primary dataset, `fully_connected / Opt 0` dominates the other configurations under these three objectives.
+The existing primary-dataset report considers two-qubit gate count, gate-only depth, and median transpilation time within `qtrace_results.csv`. The new integrated analysis compares structural metrics across the connectivity and optimization datasets, while keeping their timing summaries separate because their recorded runtime provenance differs.
 
 Its measured profile is:
 
@@ -179,7 +179,12 @@ q-trace/
 │   ├── tradeoff_analysis.py
 │   ├── plot_integrated.py
 │   └── INTEGRATED_ANALYSIS.md
+├── src/
+│   └── integrated_analysis.py
 ├── experiments/
+│   ├── connectivity/
+│   │   ├── connectivity_runner.py
+│   │   └── CONNECTIVITY_FINDINGS.md
 │   └── optimization/
 │       ├── plot_optimization.py
 │       └── OPTIMIZATION_FINDINGS.md
@@ -191,9 +196,10 @@ q-trace/
 │   ├── connectivity_experiments.csv
 │   └── tradeoff_analysis.md
 ├── tests/
+│   ├── test_integrated_analysis.py
 │   └── test_pareto_analysis.py
-├── src/
 ├── requirements.txt
+├── requirements-dev.txt
 └── README.md
 ```
 
@@ -241,8 +247,7 @@ source .venv/bin/activate
 
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install pytest matplotlib numpy
+pip install -r requirements-dev.txt
 ```
 
 ### 5. Verify the environment
@@ -268,6 +273,22 @@ python -m src.validate_qaoa
 ```bash
 python -m analysis.tradeoff_analysis --csv results/qtrace_results.csv --name "Q-TRACE Primary Experiments" --output results/tradeoff_analysis.md
 ```
+
+### Integrate connectivity and optimization datasets
+
+```bash
+python -m src.integrated_analysis
+```
+
+This validates and combines `results/connectivity_experiments.csv` and
+`results/optimization_experiments.csv`, then writes
+`results/integrated_analysis_summary.csv`. Structural metrics are compared
+for matching configurations. Median transpilation times remain separate by
+source: the connectivity CSV records Qiskit 2.5.1 / Python 3.14.2, while the
+optimization CSV records Qiskit 2.5.2 / Python 3.14.4. These historical timing
+measurements must not be pooled or described as measurements from one identical
+runtime environment. The Pareto frontier minimizes two-qubit gate count and
+gate-only depth; it excludes timing because of that provenance difference.
 
 ### Generate integrated plots
 

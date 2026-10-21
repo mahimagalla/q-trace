@@ -12,6 +12,7 @@ from src.experiment_runner import (
     build_qaoa_circuit,
     run_experiments,
 )
+from src.experiment_schema import CSV_COLUMNS, GRAPH_EDGES_SERIALIZED, INITIAL_LAYOUT_SERIALIZED
 from src.transpilation import OPTIMIZATION_LEVELS, transpile_circuit, get_coupling_map
 from src.validate_qaoa import (
     get_probabilities,
@@ -119,7 +120,13 @@ def test_metrics_count_explicit_swap():
     assert metrics["gate_count_2q"] == 1
 
 
-def test_experiment_results_have_forty_rows():
+def test_experiment_results_have_forty_rows_without_running_transpiler(monkeypatch):
+    import src.experiment_runner as runner
+
+    monkeypatch.setattr(
+        runner, "transpile_circuit",
+        lambda circuit, optimization_level, topology: (circuit, 0.001),
+    )
     results = run_experiments()
 
     assert len(results) == 40
@@ -136,6 +143,23 @@ def test_experiment_results_have_forty_rows():
         for topology in ("linear", "fully_connected")
         for level in range(4)
     }
+    assert all(list(row) == CSV_COLUMNS for row in results)
+    assert all(row["graph_edges"] == GRAPH_EDGES_SERIALIZED for row in results)
+    assert all(row["initial_layout"] == INITIAL_LAYOUT_SERIALIZED for row in results)
+
+
+def test_baseline_record_uses_real_untranspiled_metrics_and_schema():
+    from src.experiment_runner import collect_baseline
+
+    baseline = collect_baseline()
+    assert set(baseline) == set(CSV_COLUMNS)
+    assert baseline["experiment_id"] == "EXP-BASELINE"
+    assert baseline["topology"] == "baseline"
+    assert baseline["input_swap_count"] == 0
+    assert baseline["gate_count_1q"] == 8
+    assert baseline["gate_count_2q"] == 4
+    assert baseline["circuit_depth"] == 6
+    assert baseline["total_ops"] == 16
 
 
 def test_transpilation_preserves_output_probabilities():

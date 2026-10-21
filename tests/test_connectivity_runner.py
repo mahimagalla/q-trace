@@ -8,6 +8,7 @@ from experiments.connectivity.connectivity_runner import (
     run_connectivity_trials,
     validate_topology_definitions,
 )
+from src.experiment_schema import CSV_COLUMNS, GRAPH_EDGES_SERIALIZED, INITIAL_LAYOUT_SERIALIZED
 from src.transpilation import OPTIMIZATION_LEVELS, get_coupling_map
 
 
@@ -49,7 +50,6 @@ def test_connectivity_trial_generation():
         "basis_gates",
         "seed_transpiler",
         "qiskit_version",
-        "python_version",
         "total_ops",
         "measurement_count",
         "gate_count_1q",
@@ -62,7 +62,10 @@ def test_connectivity_trial_generation():
     }
 
     for row in results:
-        assert expected_keys.issubset(row.keys())
+        assert list(row) == CSV_COLUMNS
+        assert set(row) == expected_keys
+        assert row["graph_edges"] == GRAPH_EDGES_SERIALIZED
+        assert row["initial_layout"] == INITIAL_LAYOUT_SERIALIZED
         assert row["optimization_level"] in OPTIMIZATION_LEVELS
         assert row["topology"] in ("linear", "fully_connected")
         assert row["transpile_time_seconds"] > 0
@@ -180,6 +183,7 @@ def test_validate_sample_csv_row_and_routing_constraints():
     assert CONNECTIVITY_RESULTS_PATH.exists(), "results/connectivity_experiments.csv does not exist"
 
     df = pd.read_csv(CONNECTIVITY_RESULTS_PATH)
+    assert list(df.columns) == CSV_COLUMNS
 
     # 1. Validate baseline row
     baseline_rows = df[df["experiment_id"] == "EXP-BASELINE"]
@@ -190,6 +194,7 @@ def test_validate_sample_csv_row_and_routing_constraints():
     assert baseline["gate_count_2q"] == 4  # 4 RZZ gates
     assert baseline["gate_count_1q"] == 8  # 4 H + 4 RX gates
     assert baseline["circuit_depth"] == 6
+    assert baseline["input_swap_count"] == 0
 
     # 2. Validate sample compiled row (EXP-CONN-01, Trial 1)
     sample_rows = df[(df["experiment_id"] == "EXP-CONN-01") & (df["trial_id"] == 1)]

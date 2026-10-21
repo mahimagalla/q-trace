@@ -12,8 +12,6 @@ This module systematically evaluates how Qiskit transpiler optimization levels
 - Classical transpilation duration across repeated trials
 """
 
-import csv
-import platform
 import sys
 from pathlib import Path
 from statistics import mean, median
@@ -37,8 +35,15 @@ from src.metrics import collect_metrics
 from src.transpilation import (
     BASIS_GATES,
     OPTIMIZATION_LEVELS,
-    SEED_TRANSPIER,
+    SEED_TRANSPILER,
     transpile_circuit,
+)
+from src.experiment_schema import (
+    CSV_COLUMNS,
+    GRAPH_EDGES_SERIALIZED,
+    INITIAL_LAYOUT_SERIALIZED,
+    baseline_record,
+    write_csv_atomic,
 )
 
 NUM_TRIALS = 5
@@ -60,7 +65,7 @@ def run_optimization_trials(
     print("=" * 72)
     print("Q-TRACE: Running Optimization-Level Experiments (Levels 0, 1, 2, 3)")
     print(f"Topologies: {topologies} | Trials per configuration: {num_trials}")
-    print(f"Basis gates: {BASIS_GATES} | Seed: {SEED_TRANSPIER}")
+    print(f"Basis gates: {BASIS_GATES} | Seed: {SEED_TRANSPILER}")
     print("=" * 72)
 
     for topology in topologies:
@@ -87,18 +92,17 @@ def run_optimization_trials(
                 records.append({
                     "experiment_id": f"EXP-OPT-{exp_idx:02d}",
                     "circuit_name": "QAOA_MaxCut_Cycle4_p1",
-                    "graph_edges": str(GRAPH_EDGES),
+                    "graph_edges": GRAPH_EDGES_SERIALIZED,
                     "num_qubits": NUM_QUBITS,
                     "qaoa_p": 1,
                     "parameter_values": f"gamma={GAMMA},beta={BETA}",
                     "optimization_level": opt_level,
                     "topology": topology,
-                    "initial_layout": str(list(range(NUM_QUBITS))),
+                    "initial_layout": INITIAL_LAYOUT_SERIALIZED,
                     "routing_method": "Qiskit preset default",
                     "basis_gates": str(BASIS_GATES),
-                    "seed_transpiler": SEED_TRANSPIER,
+                    "seed_transpiler": SEED_TRANSPILER,
                     "qiskit_version": qiskit.__version__,
-                    "python_version": platform.python_version(),
                     "total_ops": metrics["total_ops"],
                     "measurement_count": metrics["measurement_count"],
                     "gate_count_1q": metrics["gate_count_1q"],
@@ -130,15 +134,13 @@ def save_optimization_results(
     """Save optimization experiment records to CSV."""
     if not results:
         raise ValueError("No optimization experiment records to save.")
+    if any(set(row) != set(CSV_COLUMNS) for row in results):
+        raise ValueError("Optimization trial records do not match the shared CSV schema.")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [baseline_record(build_qaoa_circuit()), *results]
+    write_csv_atomic(output_path, rows)
 
-    with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
-        writer.writeheader()
-        writer.writerows(results)
-
-    print(f"\n[OK] Saved {len(results)} trial records to: {output_path}")
+    print(f"\n[OK] Saved {len(rows)} records (1 baseline + {len(results)} trials) to: {output_path}")
 
 
 def compute_optimization_summary(results: list[dict]) -> dict:

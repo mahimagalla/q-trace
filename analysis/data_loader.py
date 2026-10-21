@@ -15,34 +15,9 @@ import statistics
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
-# Schema required columns per Q-TRACE Experiment Protocol
-REQUIRED_COLUMNS = [
-    "experiment_id",
-    "circuit_name",
-    "graph_edges",
-    "num_qubits",
-    "qaoa_p",
-    "parameter_values",
-    "optimization_level",
-    "topology",
-    "initial_layout",
-    "routing_method",
-    "basis_gates",
-    "seed_transpiler",
-    "qiskit_version",
-    "total_ops",
-    "measurement_count",
-    "gate_count_1q",
-    "gate_count_2q",
-    "circuit_depth",
-    "explicit_swap_count",
-    "input_swap_count",
-    "transpile_time_seconds",
-    "trial_id",
-]
+from src.experiment_schema import CSV_COLUMNS
 
-# Additional metadata columns allowed / expected
-ALLOWED_EXTRA_COLUMNS = {"python_version"}
+REQUIRED_COLUMNS = CSV_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -61,7 +36,6 @@ class ExperimentRecord:
     basis_gates: str
     seed_transpiler: Optional[int]
     qiskit_version: str
-    python_version: Optional[str]
     total_ops: int
     measurement_count: int
     gate_count_1q: int
@@ -92,7 +66,6 @@ class ConfigurationSummary:
     explicit_swap_count: int
     input_swap_count: int
     qiskit_version: str
-    python_version: Optional[str]
     basis_gates: str
     seed_transpiler: Optional[int]
     times_seconds: List[float] = field(default_factory=list)
@@ -155,11 +128,10 @@ class DataLoader:
             reader = csv.DictReader(f)
             headers = reader.fieldnames or []
 
-            # Check for missing required columns
-            missing_cols = [col for col in REQUIRED_COLUMNS if col not in headers]
-            if missing_cols:
+            if headers != REQUIRED_COLUMNS:
                 raise ValueError(
-                    f"CSV schema error in {self.file_path.name}: missing required columns: {missing_cols}"
+                    f"CSV schema error in {self.file_path.name}: expected columns in exact order "
+                    f"{REQUIRED_COLUMNS}; got {headers}"
                 )
 
             for line_no, row in enumerate(reader, start=2):
@@ -206,7 +178,6 @@ class DataLoader:
                 basis_gates=row["basis_gates"].strip(),
                 seed_transpiler=parse_optional_int(row.get("seed_transpiler", "")),
                 qiskit_version=row["qiskit_version"].strip(),
-                python_version=row.get("python_version", "").strip() or None,
                 total_ops=int(row["total_ops"]),
                 measurement_count=int(row["measurement_count"]),
                 gate_count_1q=int(row["gate_count_1q"]),
@@ -256,7 +227,6 @@ class DataLoader:
                 explicit_swap_count=first.explicit_swap_count,
                 input_swap_count=first.input_swap_count,
                 qiskit_version=first.qiskit_version,
-                python_version=first.python_version,
                 basis_gates=first.basis_gates,
                 seed_transpiler=first.seed_transpiler,
                 times_seconds=times,
@@ -281,7 +251,7 @@ class DataLoader:
 def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
     """
     Audits compatibility across multiple datasets.
-    Compares environment versions (Qiskit, Python), basis gates, layouts,
+    Compares environment versions (Qiskit), basis gates, layouts,
     and checks if results can be combined or must be analyzed separately.
     """
     report: Dict[str, Any] = {
@@ -293,7 +263,6 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
     signatures: Dict[str, List[str]] = {}
     for name, loader in datasets.items():
         qiskit_vers = {r.qiskit_version for r in loader.records}
-        python_vers = {r.python_version for r in loader.records}
         basis_gates = {r.basis_gates for r in loader.records}
         seeds = {r.seed_transpiler for r in loader.records}
         initial_layouts = {r.initial_layout for r in loader.records}
@@ -303,7 +272,6 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
 
         signature_parts = {
             "qiskit": qiskit_vers,
-            "python": python_vers,
             "basis": basis_gates,
             "seed": seeds,
             "layout": initial_layouts,
@@ -322,9 +290,6 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
             "topologies": sorted(list(topologies)),
             "optimization_levels": sorted([x for x in opt_levels if x is not None]),
             "qiskit_versions": sorted(list(qiskit_vers)),
-            "python_versions": sorted(
-                str(p) if p is not None else "unknown" for p in python_vers
-            ),
             "basis_gates": sorted(list(basis_gates)),
             "validation_errors": loader.validation_errors,
         }
@@ -338,13 +303,6 @@ def audit_compatibility(datasets: Dict[str, DataLoader]) -> Dict[str, Any]:
             f"Different Qiskit versions detected across datasets: {all_qiskit}. "
             "Timing comparisons between different versions must not be combined directly; "
             "separate analyses should be maintained."
-        )
-
-    all_python = {ver for ds in report["datasets"].values() for ver in ds["python_versions"]}
-    if len(all_python) > 1:
-        report["notes"].append(
-            f"Different Python versions detected across datasets: {all_python}. "
-            "Timing comparisons across these environments should be interpreted cautiously."
         )
 
     return report

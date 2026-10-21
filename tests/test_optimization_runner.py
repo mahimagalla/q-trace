@@ -7,6 +7,7 @@ from experiments.optimization.optimization_runner import (
     run_optimization_trials,
 )
 from src.transpilation import OPTIMIZATION_LEVELS
+from src.experiment_schema import CSV_COLUMNS, GRAPH_EDGES_SERIALIZED, INITIAL_LAYOUT_SERIALIZED
 
 
 def test_optimization_trial_generation():
@@ -23,6 +24,7 @@ def test_optimization_trial_generation():
     expected_keys = {
         "experiment_id",
         "circuit_name",
+        "graph_edges",
         "num_qubits",
         "qaoa_p",
         "parameter_values",
@@ -33,7 +35,6 @@ def test_optimization_trial_generation():
         "basis_gates",
         "seed_transpiler",
         "qiskit_version",
-        "python_version",
         "total_ops",
         "measurement_count",
         "gate_count_1q",
@@ -46,7 +47,10 @@ def test_optimization_trial_generation():
     }
 
     for row in results:
-        assert expected_keys.issubset(row.keys())
+        assert list(row) == CSV_COLUMNS
+        assert set(row) == expected_keys
+        assert row["graph_edges"] == GRAPH_EDGES_SERIALIZED
+        assert row["initial_layout"] == INITIAL_LAYOUT_SERIALIZED
         assert row["optimization_level"] in OPTIMIZATION_LEVELS
         assert row["transpile_time_seconds"] > 0
         assert row["circuit_depth"] > 0

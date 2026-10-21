@@ -9,8 +9,21 @@ from src.transpilation import OPTIMIZATION_LEVELS, transpile_circuit
 
 
 def cut_value(bitstring):
+    if len(bitstring) != NUM_QUBITS or set(bitstring) - {"0", "1"}:
+        raise ValueError("bitstring must contain exactly four binary digits")
     bits = bitstring[::-1]
     return sum(bits[u] != bits[v] for u, v in GRAPH_EDGES)
+
+
+def validate_classical_max_cut():
+    """Exhaustively verify the four-vertex cycle Max-Cut optimum."""
+    bitstrings = [f"{value:04b}" for value in range(2**NUM_QUBITS)]
+    values = {bitstring: cut_value(bitstring) for bitstring in bitstrings}
+    maximum = max(values.values())
+    optimal = {bitstring for bitstring, value in values.items() if value == maximum}
+    assert maximum == 4, f"Expected maximum cut 4, got {maximum}"
+    assert optimal == {"0101", "1010"}, f"Unexpected optimal bitstrings: {optimal}"
+    return maximum, optimal
 
 
 def get_probabilities(circuit):
@@ -42,6 +55,11 @@ def align_compiled_probabilities(original, compiled):
 
 
 def validate_qaoa():
+    maximum_cut, optimal_bitstrings = validate_classical_max_cut()
+    print(
+        f"Exhaustive classical Max-Cut: {maximum_cut} / 4; "
+        f"optimal strings={sorted(optimal_bitstrings)}"
+    )
     original = build_qaoa_circuit()
     original_probabilities = get_probabilities(original)
 

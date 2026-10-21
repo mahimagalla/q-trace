@@ -1,27 +1,23 @@
-from dataclasses import replace
-
 from analysis.data_loader import DataLoader, audit_compatibility
+from src.experiment_schema import CSV_COLUMNS
 
 
-def test_compatibility_groups_separate_python_versions():
-    primary = DataLoader("results/qtrace_results.csv")
-    other_python = DataLoader("results/qtrace_results.csv")
-    other_python.records = [
-        replace(record, python_version="3.13.0")
-        for record in other_python.records
-    ]
+def test_compatibility_groups_separate_qiskit_versions():
+    primary = DataLoader("results/connectivity_experiments.csv")
+    other = DataLoader("results/optimization_experiments.csv")
 
-    report = audit_compatibility({"primary": primary, "other-python": other_python})
+    report = audit_compatibility({"connectivity": primary, "optimization": other})
 
     assert len(report["compatible_groups"]) == 2
-    assert any("Different Python versions" in note for note in report["notes"])
+    assert any("Different Qiskit versions" in note for note in report["notes"])
 
 
-def test_compatibility_handles_missing_python_metadata():
-    loader = DataLoader("results/qtrace_results.csv")
-    loader.records = [replace(record, python_version=None) for record in loader.records]
-
-    report = audit_compatibility({"missing-python": loader})
-
-    assert len(report["compatible_groups"]) == 1
-    assert report["datasets"]["missing-python"]["python_versions"] == ["unknown"]
+def test_data_loader_rejects_extra_or_reordered_columns(tmp_path):
+    source = tmp_path / "bad.csv"
+    source.write_text(",".join(CSV_COLUMNS + ["unexpected"]) + "\n", encoding="utf-8")
+    try:
+        DataLoader(source)
+    except ValueError as exc:
+        assert "exact order" in str(exc)
+    else:
+        raise AssertionError("expected strict schema validation to fail")
